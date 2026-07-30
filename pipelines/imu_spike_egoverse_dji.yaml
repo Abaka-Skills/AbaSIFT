@@ -1,0 +1,45 @@
+# Demo 2 — IMU spike check over the egoverse DJI delivery (general_324h).
+#
+# The IMU has no sidecar file: it is a `DJI meta` data track inside the MP4. The vendor
+# loader declares `imu/main` over the *same URI* as `video/main` with the `dji_imu`
+# decoder, which materialises the object into the worker disk cache and demuxes the
+# telemetry track from the local file (remote demuxing would pull ~100% of the bytes in
+# thousands of tiny ranged reads — measured, see doc/components/lazyraw-cache.md).
+#
+# The duration branch runs concurrently with the IMU branch on the same samples, sharing
+# one decode cache — that is what the two independent edges out of `load` buy.
+#   abasift run pipelines/imu_spike_egoverse_dji.yaml -o /tmp/imu_report.json
+pipeline:
+  name: egoverse_dji_imu_qc
+  job_id: egoverse_dji_imu
+  nodes:
+    - name: load
+      kernel: abasift.loaders.EgoverseDjiLoader
+      params:
+        root: s3://egocentric-data-delivery/egoverse_test/general_324h
+        batch_size: 2       # each sample materialises a whole video; keep it small
+        order: size         # ascending: cheapest samples first
+        max_samples: 4
+      inputs: []
+
+    - name: duration
+      kernel: abasift.kernels.VideoDurationKernel
+      params:
+        min_s: 1.0
+        max_s: 1800.0
+      inputs: [load]
+
+    - name: imu
+      kernel: abasift.kernels.ImuSpikeKernel
+      params:
+        z_thresh: 12.0      # robust sigmas of inter-sample jerk
+        warn_spikes: 0      # any outlier at all is worth a look
+        max_spikes: 5       # more than a handful means the stream is corrupt
+      inputs: [load]
+
+    - name: dump_report
+      kernel: abasift.kernels.DataDumper
+      params:
+        keys: ["__report__"]
+        target: /tmp/abasift-out
+      inputs: [duration, imu]   # join: the executor unions both branches

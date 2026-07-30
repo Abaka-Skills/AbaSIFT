@@ -1,0 +1,8 @@
+# Runtime + test dependencies. Installed into the conda env via environment.yml.
+# Kept as a plain requirements file so a bare `pip install -r` also works.
+fsspec>=2024.6            # all I/O goes through fsspec (local and s3:// identical)
+s3fs>=2024.6              # fsspec's s3 backend (pulls aiobotocore/botocore)
+av>=12.0                  # PyAV — video/IMU container decoding
+numpy>=1.26               # IMU signal math
+PyYAML>=6.0               # pipeline YAML
+pytest>=8.0               # acceptance tests

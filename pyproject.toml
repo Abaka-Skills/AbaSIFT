@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "abasift"
+version = "0.1.0"
+description = "AbaSift — distributed QC framework for egocentric vendor datasets"
+requires-python = ">=3.11"
+dependencies = [
+    "fsspec>=2024.6",
+    "s3fs>=2024.6",
+    "av>=12.0",
+    "numpy>=1.26",
+    "PyYAML>=6.0",
+]
+
+[project.scripts]
+abasift = "abasift.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["test"]
+markers = [
+    "s3: integration tests that hit the real vendor bucket (needs test/s3.json)",
+    "slow: materialises whole videos to disk",
+]

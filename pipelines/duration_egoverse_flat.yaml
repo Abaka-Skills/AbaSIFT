@@ -1,0 +1,32 @@
+# Demo 1 — duration probe over the egoverse flat delivery (iPhone/Core Media footage).
+#
+# Header-only probe: VideoDurationKernel decodes `video_meta`, which reads the container
+# header over ranged GETs. ~0.5 MB per file regardless of file size, so this covers a
+# 15.7 GB delivery for a few megabytes of transfer.
+#
+# Credentials come from the standard AWS chain (env / ~/.aws/credentials) — never here.
+#   abasift run pipelines/duration_egoverse_flat.yaml -o /tmp/duration_report.json
+pipeline:
+  name: egoverse_duration_probe
+  job_id: egoverse_flat_duration
+  nodes:
+    - name: load
+      kernel: abasift.loaders.FlatDirLoader
+      params:
+        root: s3://egocentric-data-delivery/egoverse_test/20260730_test
+        batch_size: 4
+      inputs: []
+
+    - name: duration
+      kernel: abasift.kernels.VideoDurationKernel
+      params:
+        min_s: 1.0          # anything under a second is not a usable take
+        max_s: 1800.0       # 30 min: longer means the vendor never split the recording
+      inputs: [load]
+
+    - name: dump_report
+      kernel: abasift.kernels.DataDumper
+      params:
+        keys: ["__report__"]
+        target: /tmp/abasift-out
+      inputs: [duration]

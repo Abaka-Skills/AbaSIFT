@@ -1,0 +1,13 @@
+# Conda environment for AbaSift (ego_qa).
+#   conda env create -f environment.yml     # first time
+#   conda env update -f environment.yml --prune   # after edits
+#   conda activate abasift
+name: abasift
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12          # design requires >= 3.11
+  - ffmpeg               # tests synthesize videos with it; PyAV links its own libs
+  - pip
+  - pip:
+      - -r requirements.txt

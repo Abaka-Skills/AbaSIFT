@@ -1,4 +1,4 @@
-# AbaSift
+<img src="doc/icon.png" alt="AbaSift" width="360">
 
 Distributed quality-control framework for egocentric vendor datasets on S3. A QC pipeline
 is a DAG of kernels described in one YAML, and one YAML is one job on one machine.

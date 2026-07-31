@@ -59,7 +59,7 @@ def test_flat_track_yields_no_spurious_spikes():
 def _check(track, **params):
     kernel = ImuSpikeKernel(**params)
     sample = Sample("s1", {"imu/main": kft.put_track("t1", track)})
-    checks, artifacts = kernel.check(sample, None)
+    checks, artifacts = kernel.sift(sample, None)
     return checks["imu_spike"], artifacts
 
 

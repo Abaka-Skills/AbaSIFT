@@ -41,5 +41,5 @@ pipeline:
       kernel: abasift.kernels.DataDumper
       params:
         keys: ["__report__"]
-        # No `target:` — defaults to ./dump/<mmddyyyy>/<job_id>/<node>/.
+        # No `target:` — defaults to ./dump/<unix ts>/<job_id>/<node>/.
       inputs: [duration, imu]   # join: the executor unions both branches

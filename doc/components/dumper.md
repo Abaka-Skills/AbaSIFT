@@ -32,20 +32,23 @@ stay in `cache.py`, where they belong. For intermediates nobody downstream reads
 
 | `target` in YAML | `target_root` | why |
 |---|---|---|
-| omitted | `dump/<mmddyyyy>` | Interactive runs get a tidy dated tree under the working directory. **Relative, never absolute**, so a YAML is portable between machines. |
-| set (`/data/out`, `s3://…`) | used verbatim, **undated** | `f(job_id, node, key)` with no timestamps, so a retried job overwrites rather than duplicates (`test_rerunning_the_same_yaml_overwrites_the_same_paths`). |
+| omitted | `dump/<unix ts>` | Interactive runs get their own tree per run under the working directory. **Relative, never absolute**, so a YAML is portable between machines. |
+| set (`/data/out`, `s3://…`) | used verbatim, **unstamped** | `f(job_id, node, key)` with no timestamps, so a retried job overwrites rather than duplicates (`test_rerunning_the_same_yaml_overwrites_the_same_paths`). |
 | `""` (explicit) | — | *free* mode. |
 
 So the no-timestamps rule still holds wherever it matters: anything an external splitter
-generates sets `target` explicitly. A default run pays for the date only if it is retried
-across midnight — and the date it used is recorded in the report as `job.date`, so the
-exact tree can be reproduced by passing `target: dump/<that date>`.
+generates sets `target` explicitly, and stays idempotent. What the default trades away is
+that idempotency — **every run gets its own tree**, so nothing a default run writes can
+collide with an earlier one, and the directories accumulate until someone deletes them.
+That is the right trade for an interactive run and the wrong one for a production job,
+which is exactly the split.
 
-The date is read from the job's start time **once per job**, so every dumper in a DAG
-agrees even if the run straddles midnight.
+The stamp is `job.started_unix`, read from the job's start time **once per job**, so every
+dumper in a DAG agrees. It is in the report, so the tree a run went to can always be
+reproduced with `target: dump/<that stamp>`.
 
 Free mode is **opt-in**: `target` must be explicitly `""`. Omitting it gives you the
-dated dump, never a silent delete — the destructive mode is the one you have to ask for.
+stamped dump, never a silent delete — the destructive mode is the one you have to ask for.
 
 ## `__report__` is dumped after finalize
 

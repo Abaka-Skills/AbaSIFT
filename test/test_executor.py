@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 
 import kernels_for_test as kft
 import pytest
@@ -116,19 +117,20 @@ def test_dumper_writes_the_finished_report(tmp_path):
     assert artifacts["dump/report_uri"].endswith("report.json")
 
 
-def test_dump_target_defaults_to_a_dated_relative_tree(tmp_path, monkeypatch):
-    """No `target:` in YAML -> ./dump/<mmddyyyy>/<job_id>/<node>/, never an absolute path."""
+def test_dump_target_defaults_to_a_stamped_relative_tree(tmp_path, monkeypatch):
+    """No `target:` in YAML -> ./dump/<unix ts>/<job_id>/<node>/, never an absolute path."""
     monkeypatch.chdir(tmp_path)  # the default is relative to the working directory
+    before = int(time.time())
     report, _artifacts = _run(
         [
             {"name": "load", "kernel": SYNTH, "params": {"n": 1, "batch_size": 1}, "inputs": []},
             {"name": "dump", "kernel": "abasift.kernels.DataDumper", "inputs": ["load"]},
         ],
-        job_id="dated",
+        job_id="stamped",
     )
-    date = report.job["date"]
-    assert len(date) == 8 and date.isdigit()
-    assert (tmp_path / "dump" / date / "dated" / "dump" / "report.json").exists()
+    stamp = report.job["started_unix"]
+    assert isinstance(stamp, int) and before <= stamp <= int(time.time())
+    assert (tmp_path / "dump" / str(stamp) / "stamped" / "dump" / "report.json").exists()
 
 
 def test_an_explicit_target_is_used_verbatim_and_undated(tmp_path):
@@ -147,7 +149,7 @@ def test_an_explicit_target_is_used_verbatim_and_undated(tmp_path):
         job_id="pinned",
     )
     assert (target / "pinned" / "dump" / "report.json").exists()
-    assert not list(target.glob("[0-9]" * 8)), "an explicit target must not gain a date segment"
+    assert not list(target.glob("[0-9]" * 8)), "an explicit target must not gain a stamp segment"
 
 
 def test_dumper_free_mode_drops_the_key(tmp_path):

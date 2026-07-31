@@ -62,7 +62,11 @@
   <svg class="diagram" viewBox="0 0 960 480" role="img" aria-label="Module layer diagram">
     <rect class="b-exec" x="370" y="16" width="220" height="52" rx="7"/>
     <text class="t" x="480" y="39" text-anchor="middle">cli.py</text>
-    <text class="lbl" x="480" y="56" text-anchor="middle">abasift run | validate</text>
+    <text class="lbl" x="480" y="56" text-anchor="middle">abasift run | validate | vis</text>
+
+    <rect class="b-dash" x="20" y="16" width="200" height="52" rx="7"/>
+    <text class="t" x="120" y="39" text-anchor="middle">vis/</text>
+    <text class="lbl" x="120" y="56" text-anchor="middle">hosts a view; runs nothing</text>
 
     <rect class="b-exec" x="230" y="116" width="210" height="52" rx="7"/>
     <text class="t" x="335" y="139" text-anchor="middle">pipeline.py</text>
@@ -101,6 +105,7 @@
     <path class="edge" d="M730,142 H880 V358 H850" marker-end="url(#arw)"/>
     <path class="edge" d="M230,142 H80 V358 H110" marker-end="url(#arw)"/>
     <path class="edge" d="M480,396 V428" marker-end="url(#arw)"/>
+    <path class="edge-d" d="M120,68 V130 H230" marker-end="url(#arw)"/>
 
     <text class="lbl-i" x="900" y="250" text-anchor="middle">imports</text>
     <text class="lbl-i" x="52" y="250" text-anchor="middle">imports</text>
@@ -111,7 +116,12 @@
     The one upward-looking edge is <code>decoders.py → vendor/</code>: the registry imports the DJI
     reader so a <code>LazyRaw</code> can name <code>"dji_imu"</code> as a plain string. That keeps
     vendor code out of every other module, at the price of one import the layering would otherwise
-    forbid.
+    forbid. <code>vis/</code> is dashed because it hangs off the side of the stack: it imports
+    <code>pipeline.py</code> and, through it, the kernel classes a YAML names — only to
+    <code>inspect</code> them. Nothing in the data plane imports it, and it does no I/O. Under
+    <code>run --vis</code> the executor pushes progress back to it through a plain
+    <code>observer(event, …)</code> callback, so even then the executor stays unaware of who
+    is watching.
   </p>
 
   <!-- ============================ 2 ============================ -->
@@ -262,7 +272,7 @@
     <rect class="b-kern" x="84" y="312" width="270" height="80" rx="7"/>
     <text class="t" x="100" y="334">SampleKernel</text>
     <line class="sep" x1="84" y1="344" x2="354" y2="344"/>
-    <text class="m" x="100" y="364">check(sample, art)</text>
+    <text class="m" x="100" y="364">sift(sample, art)</text>
     <text class="lbl" x="100" y="382">owns the per-sample failsafe</text>
 
     <rect class="b-warn" x="84" y="416" width="270" height="72" rx="7"/>

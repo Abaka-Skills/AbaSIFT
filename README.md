@@ -1,41 +1,69 @@
 # AbaSift
 
-Distributed quality-control framework for egocentric vendor datasets on S3.
+Distributed quality-control framework for egocentric vendor datasets on S3. A QC pipeline
+is a DAG of kernels described in one YAML, and one YAML is one job on one machine.
 
-A **job** is one pipeline YAML run on one machine. Work distribution is external: an
-outside system generates one YAML per machine; this framework's contract is *"given one
-YAML, one machine runs it to completion and emits the report + artifacts for that YAML's
-scope."*
+## Quick start
 
 ```bash
-bash setup.sh && conda activate abasift
-pytest                                                   # 56 tests
-abasift run pipelines/duration_egoverse_flat.yaml -o report.json
+bash setup.sh && conda activate abasift    # conda env `abasift`, package installed editable
+pytest -m 'not s3'                         # 91 offline tests; plain `pytest` adds 4 bucket tests
 ```
 
-## What it does
+Run the duration demo, then look at what ran:
 
-A QC pipeline is a DAG of kernels defined in YAML. Node 0 is a per-vendor loader that
-normalises the vendor's directory layout into canonical named streams (`video/main`,
-`imu/main`, …) of **lazy handles** — nothing is downloaded until a kernel asks. Each
-downstream kernel takes a read-only `ArtifactUnion` + report and returns *extensions*; the
-executor owns merging at joins, runs independent branches on threads, and aggregates a
-JSON report whose skeleton is enforced and whose leaves are free-form.
+```bash
+abasift validate pipelines/duration_egoverse_flat.yaml            # check the DAG, run nothing
+abasift run      pipelines/duration_egoverse_flat.yaml -o report.json
+abasift vis      pipelines/duration_egoverse_flat.yaml            # host the DAG, ctrl-c to stop
+abasift run      pipelines/duration_egoverse_flat.yaml --vis      # ...and watch it run
+```
 
-Kernels judge, YAML holds thresholds, the framework only aggregates (`error > fail > warn >
-pass`). A job always completes and always reports: a corrupt file is a finding, not a crash.
+`run` prints the per-node summaries and writes the JSON report; exit code 0 means *the job
+completed and reported*, since QC verdicts are findings, not process failures.
 
-## Two demos, both on the real vendor bucket
+`vis` hosts the pipeline at `http://127.0.0.1:8765` — the DAG with each kernel's params and
+signatures, read live off the code, so leave it open while you edit. `run --vis` hosts the
+same graph while the job runs, with the executing node lit and verdicts filling in. Neither
+writes a file.
 
-| demo | pipeline | result |
-|------|----------|--------|
-| duration probe | `pipelines/duration_egoverse_flat.yaml` | 53 files / 15.7 GB in 21.6 s, reading ~0.5 MB per file (container header only, no download) |
-| IMU spike check | `pipelines/imu_spike_egoverse_dji.yaml` | IMU extracted from a protobuf telemetry track *inside* the MP4; robust median/MAD spike scan; missing-telemetry files reported as `error` while the job completes |
+## What a pipeline looks like
+
+```yaml
+pipeline:
+  name: egoverse_duration_probe
+  job_id: egoverse_flat_duration
+  nodes:
+    - name: load                                  # node 0 is always the vendor loader
+      kernel: abasift.loaders.FlatDirLoader
+      params:
+        root: s3://egocentric-data-delivery/1_test_20260730
+        batch_size: 4
+      inputs: []
+
+    - name: duration
+      kernel: abasift.kernels.VideoDurationKernel
+      params:
+        min_s: 1.0                                # thresholds live here, never in code
+        max_s: 1800.0
+      inputs: [load]
+
+    - name: dump_report
+      kernel: abasift.kernels.DataDumper
+      params: {keys: ["__report__"]}              # -> ./dump/<unix ts>/<job_id>/<node>/
+      inputs: [duration]
+```
+
+Kernels judge, the YAML holds thresholds, the framework only aggregates. Adding a check
+means writing a `SampleKernel` and naming it in a YAML —
+[doc/components/kernels.md](doc/components/kernels.md).
+
+Credentials come from the standard AWS chain only (env, `~/.aws/credentials`, instance
+role) — never from a YAML, never committed.
 
 ## Docs
 
-- [doc/design.md](doc/design.md) — contract spec + decision log (read this first)
-- [doc/uml/index.html](doc/uml/index.html) — rendered architecture diagrams (self-contained, open in a browser); [mermaid source](doc/uml/README.md)
+- [doc/design.md](doc/design.md) — contract spec + decision log. **Read this first.**
 - [doc/progress.md](doc/progress.md) — component status, test map, known limitations
 - [doc/components/](doc/components/) — per-component detail:
   [lazyraw + cache](doc/components/lazyraw-cache.md) ·
@@ -45,11 +73,7 @@ pass`). A job always completes and always reports: a corrupt file is a finding, 
   [kernels](doc/components/kernels.md) ·
   [loaders](doc/components/loaders.md) ·
   [dumper](doc/components/dumper.md) ·
-  [DJI telemetry](doc/components/dji-telemetry.md)
-
-## Credentials
-
-All I/O goes through fsspec; `s3://` and local paths behave identically. Credentials come
-from the standard AWS chain only — never from YAML, never committed. `test/s3.json` holds
-real vendor keys, is gitignored, and is read by exactly one thing in this repo: the
-`s3_env` pytest fixture.
+  [DJI telemetry](doc/components/dji-telemetry.md) ·
+  [visualiser](doc/components/vis.md)
+- [doc/uml/index.html](doc/uml/index.html) — architecture diagrams of the framework
+  (self-contained, open in a browser); [mermaid source](doc/uml/README.md)

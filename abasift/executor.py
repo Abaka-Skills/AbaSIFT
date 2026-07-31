@@ -31,7 +31,7 @@ import socket
 import time
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from datetime import datetime, timezone
-from typing import Any, Iterator
+from typing import Any, Callable, Iterator
 
 from .data import ArtifactUnion
 from .errors import ExecutorError
@@ -43,10 +43,19 @@ log = logging.getLogger("abasift.executor")
 
 
 class Executor:
-    def __init__(self, pipeline: Pipeline, max_workers: int | None = None):
+    def __init__(
+        self,
+        pipeline: Pipeline,
+        max_workers: int | None = None,
+        observer: "Callable[..., None] | None" = None,
+    ):
         self.pipeline = pipeline
         self.max_workers = max_workers or min(8, max(1, len(pipeline.nodes)))
         self.artifacts = ArtifactUnion()
+        #: Optional ``observer(event, **payload)`` — progress telemetry for whoever is
+        #: watching (``abasift run --vis``). The executor knows nothing about the watcher,
+        #: and an observer that raises can never take the job down: see :meth:`_emit`.
+        self.observer = observer
 
     # -- public ----------------------------------------------------------
 
@@ -60,9 +69,9 @@ class Executor:
                 "job_id": p.job_id,
                 "worker": f"{socket.gethostname()}:{os.getpid()}",
                 "started_at": _utc(started),
-                # One clock read per job: every dumper agrees on the date even across
-                # midnight, and the report records where its artifacts went.
-                "date": datetime.fromtimestamp(started, tz=timezone.utc).strftime("%m%d%Y"),
+                # One clock read per job, so every dumper in the DAG agrees on the stamp;
+                # recorded here so the tree a default dump went to is reproducible.
+                "started_unix": int(started),
                 "python": platform.python_version(),
             }
         )
@@ -75,6 +84,7 @@ class Executor:
         order = p.topo_order()
         downstream = [n for n in order if n != p.source]
         inputs = {n.name: tuple(n.inputs) for n in p.nodes}
+        self._emit("job_started", job=report.job)
 
         n_batches = 0
         with ThreadPoolExecutor(max_workers=self.max_workers, thread_name_prefix="abasift") as pool:
@@ -91,7 +101,10 @@ class Executor:
                 src_rep = Report()
                 src_rep.apply(p.source, batch_rext)
 
-                arts, reps = self._run_dag(kernels, downstream, inputs, src_art, src_rep, pool)
+                self._emit("batch_started", index=n_batches, n_samples=len(batch) if batch else 0)
+                arts, reps = self._run_dag(
+                    kernels, downstream, inputs, src_art, src_rep, pool, n_batches
+                )
 
                 batch_art = ArtifactUnion()
                 for a in arts.values():
@@ -102,6 +115,9 @@ class Executor:
 
                 self.artifacts = self.artifacts.union(batch_art.without_transients())
                 report.merge(batch_report)
+                # The batch's own fragment, not the job report: a watcher folds it in
+                # incrementally instead of re-counting every sample seen so far.
+                self._emit("batch_merged", index=n_batches, report=batch_report)
                 if batch is not None:
                     batch.release()  # tier-2 cache: decoded payloads die with the batch
 
@@ -132,9 +148,19 @@ class Executor:
                     report.apply(name, m.report_ext)
 
         log.info("job done: %s", report.job["counts"])
+        self._emit("job_finished", job=report.job, summary=report.summary)
         return report
 
     # -- internals -------------------------------------------------------
+
+    def _emit(self, event: str, **payload) -> None:
+        """Tell the observer, if there is one. Telemetry must never fail a job."""
+        if self.observer is None:
+            return
+        try:
+            self.observer(event, **payload)
+        except Exception:
+            log.debug("observer failed on %s", event, exc_info=True)
 
     def _iter_source(
         self, source: SourceKernel, report: Report
@@ -153,7 +179,7 @@ class Executor:
                 )
                 return
 
-    def _run_dag(self, kernels, downstream, inputs, src_art, src_rep, pool):
+    def _run_dag(self, kernels, downstream, inputs, src_art, src_rep, pool, batch_index=0):
         """Run every downstream node once, respecting edges, branches in parallel."""
         arts: dict[str, ArtifactUnion] = {self.pipeline.source: src_art}
         reps: dict[str, Report] = {self.pipeline.source: src_rep}
@@ -166,6 +192,7 @@ class Executor:
                 pending.remove(name)
                 art_in = _union_of(arts[d] for d in inputs[name])
                 rep_in = _report_of(reps[d] for d in inputs[name])
+                self._emit("node_started", node=name, batch=batch_index)
                 inflight[pool.submit(self._run_node, name, kernels[name], art_in, rep_in)] = name
             if not inflight:
                 raise ExecutorError(f"nodes {pending} are unreachable (validation should have caught this)")
@@ -173,6 +200,7 @@ class Executor:
             for f in done:
                 name = inflight.pop(f)
                 arts[name], reps[name] = f.result()
+                self._emit("node_finished", node=name, batch=batch_index)
         return arts, reps
 
     def _run_node(self, name, kernel, art_in: ArtifactUnion, rep_in: Report):

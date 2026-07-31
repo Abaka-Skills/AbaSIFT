@@ -61,7 +61,7 @@ class ImuSpikeKernel(SampleKernel):
         self.min_samples = int(min_samples)
         self.check_name = check_name
 
-    def check(self, sample: Sample, art: ArtifactUnion):
+    def sift(self, sample: Sample, art: ArtifactUnion):
         imu: ImuTrack = sample.stream(self.stream).decode()
         threshold = {
             "z_thresh": self.z_thresh,

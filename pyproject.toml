@@ -25,6 +25,10 @@ abasift = "abasift.cli:main"
 where = ["."]
 include = ["abasift*"]
 
+[tool.setuptools.package-data]
+# vis inlines these into the HTML it generates, so they must ship with the wheel.
+abasift = ["vis/assets/*"]
+
 [tool.pytest.ini_options]
 testpaths = ["test"]
 markers = [

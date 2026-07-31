@@ -3,7 +3,7 @@
 Status of every component, with a pointer to its own doc. Update this file when a
 component's state changes.
 
-Verification: `pytest` (73 tests: 69 offline + 4 against the real bucket) and
+Verification: `pytest` (95 tests: 91 offline + 4 against the real bucket) and
 `python -m pyflakes abasift test` (clean — no unused or shadowed imports).
 
 ## Repo layout
@@ -15,7 +15,9 @@ abasift/            the package, flat at the repo root (no src/ indirection)
   ├─ pipeline.py executor.py cli.py               orchestration
   ├─ kernels/       duration.py imu_spike.py dumper.py
   ├─ loaders/       flat_dir.py egoverse.py _fs.py (shared listing helpers)
-  └─ vendor/        dji_telemetry.py — the only vendor-format-specific module
+  ├─ vendor/        dji_telemetry.py — the only vendor-format-specific module
+  └─ vis/           server.py model.py live.py render.py assets/ — hosts a view of a YAML,
+                    and of a job while it runs (`run --vis`)
 pipelines/          runnable demo YAMLs
 test/               offline suite + s3-marked integration suite
 doc/                design.md, progress.md, components/, uml/ (index.html + mermaid)
@@ -24,7 +26,8 @@ doc/                design.md, progress.md, components/, uml/ (index.html + merm
 Import discipline: modules import *inwards* only — `kernels/` and `loaders/` depend on the
 core (`data`, `report`, `kernel`, `lazy`), never on each other or on the executor. Vendor
 format knowledge is confined to `vendor/`, reached only through a registered decoder, so
-adding a vendor touches `loaders/` + `vendor/` and nothing else.
+adding a vendor touches `loaders/` + `vendor/` and nothing else. `vis/` hangs off the side:
+it imports `pipeline.py` to `inspect` what a YAML names, and nothing imports `vis/`.
 
 | # | Component | Module | Doc | State |
 |---|-----------|--------|-----|-------|
@@ -41,7 +44,8 @@ adding a vendor touches `loaders/` + `vendor/` and nothing else.
 | 11 | DJI telemetry reader | `vendor/dji_telemetry.py` | [dji-telemetry.md](components/dji-telemetry.md) | done |
 | 12 | Demo 1 — duration probe | `kernels/duration.py` | [kernels.md](components/kernels.md) | done, runs on S3 |
 | 13 | Demo 2 — IMU spike | `kernels/imu_spike.py` | [kernels.md](components/kernels.md) | done, runs on S3 |
-| 14 | Tests | `test/` | this file, below | 73 passing |
+| 14 | Pipeline visualiser | `vis/` | [vis.md](components/vis.md) | done |
+| 15 | Tests | `test/` | this file, below | 95 passing |
 
 ## 1. Environment
 
@@ -63,12 +67,20 @@ referenced from `environment.yml`, so the two can't drift. Runtime deps: `fsspec
 ```bash
 abasift validate pipelines/duration_egoverse_flat.yaml     # load + validate, run nothing
 abasift run <pipeline.yaml> [-o report.json] [--job-id X] [--max-workers N] [-v]
+abasift vis <pipeline.yaml> [--host H] [--port N]                    # what the pipeline is
+abasift run <pipeline.yaml> --vis [--vis-port N]                     # what the job is doing
 ```
+
+Both host (default `http://127.0.0.1:8765`) rather than writing a file. `vis` holds no
+rendered output at all — it re-reads the YAML, re-imports edited kernels and re-describes
+on every request, so an open page follows the working tree. `run --vis` hands the executor
+a progress observer and serves the graph filling in as the job runs —
+[components/vis.md](components/vis.md).
 
 Exit code 0 means *the job completed and reported* — QC verdicts inside the report are
 not process failures. Exit 2 means the YAML itself is broken.
 
-## 14. Tests
+## 15. Tests
 
 ```bash
 pytest                       # everything (needs test/s3.json for the 4 s3 tests)
@@ -86,6 +98,7 @@ ABASIFT_TEST_MAX_SAMPLES=50 pytest -m s3 -s     # run wide over the real deliver
 | `test_loaders.py` | enumeration findings, ordering, `recursive`/`patterns`, and the shared `batch_stream` grouping rule |
 | `test_imu_spike.py` | spike statistics, verdict thresholds, DJI wire-format round-trip, layout validation, missing-track failsafe |
 | `test_integration_s3.py` | both demos end to end on the vendor bucket; asserts *no* download for header probes and exactly one download for a shared URI |
+| `test_vis.py` | that the pipeline view is *derived* (roles and columns from the DAG, signatures and defaults from the live classes) and *hosted* (editing the YAML or a kernel moves the state token and changes the served page; a broken YAML is shown, not fatal); and that `run --vis` works off executor events — an observer that raises cannot fail a job, and `RunView` never re-reads the YAML mid-run |
 
 The integration tests default to 3 (duration) / 2 (IMU) samples and take the smallest
 files first (`order: size`), so a full run costs a few seconds. Raise

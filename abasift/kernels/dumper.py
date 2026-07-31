@@ -9,8 +9,10 @@ oblivious: ``.decode()`` works either way. Memory freed, information preserved.
 **free** (``target:`` empty) — drop the matching keys, and delete their backing file if it
 lives in our own disk cache. For intermediates nobody downstream reads.
 
-Paths are ``f(job_id, node, key)`` with no timestamps, so a re-run of the same YAML
-overwrites the same objects and a retried job is idempotent.
+Under an explicit ``target`` paths are ``f(job_id, node, key)`` with no timestamps, so a
+re-run of the same YAML overwrites the same objects and a retried job is idempotent. The
+*default* target instead stamps the job's start time (``dump/<unix ts>/``), giving every
+run its own tree — see :attr:`DataDumper.target_root`.
 
 Placement is the pipeline author's job: a dumper is an explicit node, and it must sit
 *downstream* of everything that reads the keys it frees — a dumper running concurrently
@@ -47,8 +49,8 @@ class DataDumper(MutatingKernel):
     """Params:
 
     ``keys``    globs over union keys, plus the pseudo-key ``__report__``
-    ``target``  destination prefix (local or ``s3://``). Omit it for the dated default
-                ``dump/<mmddyyyy>/``; set it to ``""`` for *free* mode.
+    ``target``  destination prefix (local or ``s3://``). Omit it for the per-run default
+                ``dump/<unix ts>/``; set it to ``""`` for *free* mode.
     """
 
     def __init__(self, keys: list[str] | tuple[str, ...] = (REPORT_KEY,), target: str | None = None):
@@ -58,17 +60,18 @@ class DataDumper(MutatingKernel):
 
     @property
     def target_root(self) -> str:
-        """An explicit ``target`` is used verbatim; the default is ``dump/<mmddyyyy>``.
+        """An explicit ``target`` is used verbatim; the default is ``dump/<unix ts>``.
 
-        The date lives in the *default* only, deliberately. Dump paths must be
-        deterministic so a retried job overwrites rather than duplicates, and a date is a
-        timestamp — so a pipeline that cares (anything an external splitter generates)
-        sets ``target`` explicitly and keeps `f(job_id, node, key)`. Interactive runs get
-        a tidy dated tree instead, and pay for it only if they are retried across midnight.
+        The timestamp lives in the *default* only, deliberately. Dump paths must be
+        deterministic so a retried job overwrites rather than duplicates — so a pipeline
+        that cares (anything an external splitter generates) sets ``target`` explicitly
+        and keeps `f(job_id, node, key)`. A default run instead gets a tree per run:
+        nothing it writes can ever collide with an earlier one, at the price of
+        accumulating directories a human has to clean up.
         """
         if self.target is not None:
             return self.target
-        return f"{DEFAULT_TARGET_ROOT}/{self.job.get('date') or 'undated'}"
+        return f"{DEFAULT_TARGET_ROOT}/{self.job.get('started_unix') or 'unstamped'}"
 
     @property
     def freeing(self) -> bool:

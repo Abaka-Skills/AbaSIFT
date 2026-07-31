@@ -8,8 +8,10 @@ source for the same architecture; keep the two in step when the design changes. 
 
 ```mermaid
 flowchart TB
-    CLI["cli.py"] --> PIPE["pipeline.py<br/>YAML → validated DAG"]
+    CLI["cli.py<br/>abasift run | validate | vis"] --> PIPE["pipeline.py<br/>YAML → validated DAG"]
     CLI --> EXEC["executor.py<br/>per-batch streaming, threads"]
+    VIS["vis/<br/>hosts a view; runs nothing"] -.-> PIPE
+    EXEC -.->|"observer(event, …)"| VIS
     EXEC --> PIPE
     PIPE --> CORE
     EXEC --> CORE
@@ -21,6 +23,12 @@ flowchart TB
 
 Kernels and loaders depend on the core and nothing else — never on the executor, never on each
 other. Vendor format knowledge is a leaf, reached only through a registered decoder.
+
+`vis/` hangs off the side: it imports `pipeline.py` and, through it, the kernel classes a YAML
+names — purely to `inspect` them. Nothing in the data plane imports `vis/`, and it performs no
+I/O. The dashed edge back from the executor is the progress observer (`run --vis`): a plain
+callback, so the executor stays unaware of who is watching
+([components/vis.md](../components/vis.md)).
 
 ## 2. Data plane — what flows through the DAG
 
@@ -102,7 +110,7 @@ classDiagram
     }
     class SampleKernel {
         +check_name: str
-        +check(sample, art)
+        +sift(sample, art)
     }
     note for SampleKernel "owns the per-sample failsafe:\nskips samples already error upstream,\nturns an exception into status: error"
 

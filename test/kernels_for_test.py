@@ -55,7 +55,7 @@ class TouchKernel(SampleKernel):
 
     check_name = "touched"
 
-    def check(self, sample, art):
+    def sift(self, sample, art):
         value = sample.stream("blob/main").decode()
         return {self.check_name: Check("pass", measurement=value)}
 
@@ -79,7 +79,7 @@ class ExplodingKernel(SampleKernel):
 
     check_name = "boom"
 
-    def check(self, sample, art):
+    def sift(self, sample, art):
         raise RuntimeError("deliberate kernel failure")
 
 

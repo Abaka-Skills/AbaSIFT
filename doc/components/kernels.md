@@ -8,7 +8,7 @@ Modules: `abasift/kernel.py`, `abasift/kernels/`.
 |-------|-----|----------|
 | `SourceKernel` | node 0 | `iter_batches() -> Iterator[(ArtifactExt, ReportExt)]` |
 | `Kernel` | everything else | `run(art, report) -> (ArtifactExt, ReportExt)`, optional `finalize(...)` |
-| `SampleKernel` | most check kernels | implement `check(sample, art)`; the base class loops the batch |
+| `SampleKernel` | most check kernels | implement `sift(sample, art)`; the base class loops the batch |
 | `MutatingKernel` | framework-internal | `DataDumper` only, see [dumper.md](dumper.md) |
 
 Inputs are read-only. Kernels return only extensions; the executor namespaces and merges.
@@ -17,8 +17,9 @@ Kernels must never mutate the union or report in place — branches run concurre
 `SampleKernel` is where the **per-sample failsafe** lives, so every check kernel inherits it:
 it skips samples already `error` upstream (`report.is_alive`), and turns an exception on one
 sample into `status: error` for that sample under the kernel's own `check_name` — a declared
-class attribute, so one node always contributes exactly one check key per sample. `check()`
-returns either `{check_name: Check}` or `({check_name: Check}, {artifact_name: value})`.
+class attribute, so one node always contributes exactly one check key per sample. `sift()`
+returns either `{check_name: Check}` or `({check_name: Check}, {artifact_name: value})` — it
+both processes the sample and judges it, which is why it is not called `check()`.
 
 `SourceKernel` gets the mirror-image helper: `batch_stream(items, batch_size)` groups a
 loader's normalised output into batches, so batching policy lives in the framework rather
@@ -99,7 +100,7 @@ class MyCheck(SampleKernel):
         self.max_thing = float(max_thing)
         self.stream = stream
 
-    def check(self, sample, art):
+    def sift(self, sample, art):
         value = measure(sample.stream(self.stream).decode())
         status = "fail" if value > self.max_thing else "pass"
         check = Check(status, measurement=value, threshold={"max_thing": self.max_thing})

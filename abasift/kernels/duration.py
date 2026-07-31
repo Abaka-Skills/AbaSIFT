@@ -30,7 +30,7 @@ class VideoDurationKernel(SampleKernel):
         self.stream = stream
         self.check_name = check_name
 
-    def check(self, sample: Sample, art: ArtifactUnion):
+    def sift(self, sample: Sample, art: ArtifactUnion):
         meta = sample.stream(self.stream).decode()
         duration = round(float(meta.duration_s), 3)
         too_short = duration < self.min_s

@@ -4,9 +4,9 @@ Four classes, three of which a QC author might subclass:
 
 * ``SourceKernel`` — node 0. Enumerates a vendor layout into batches of samples.
 * ``Kernel`` — anything else. One ``run`` per batch, optional ``finalize`` at the end.
-* ``SampleKernel`` — the base most check kernels want: it loops the batch, skips samples
-  that already failed upstream, and turns a per-sample exception into ``status: error``
-  so one bad sample never takes down its batchmates.
+* ``SampleKernel`` — the base most check kernels want: it loops the batch calling ``sift``,
+  skips samples that already failed upstream, and turns a per-sample exception into
+  ``status: error`` so one bad sample never takes down its batchmates.
 * ``MutatingKernel`` — framework-internal. Only ``DataDumper`` may replace or delete
   existing union keys.
 """
@@ -98,7 +98,7 @@ def batch_stream(
 
 
 class SampleKernel(Kernel):
-    """Per-sample check kernel. Subclasses implement :meth:`check`.
+    """Per-sample check kernel. Subclasses implement :meth:`sift`.
 
     This is where the per-sample failsafe lives, so every check kernel gets it for free.
     """
@@ -108,8 +108,8 @@ class SampleKernel(Kernel):
     #: Subclasses set it (as a class attribute or in ``__init__``).
     check_name: str = "check"
 
-    def check(self, sample: Sample, art: ArtifactUnion):
-        """Judge one sample.
+    def sift(self, sample: Sample, art: ArtifactUnion):
+        """Measure, process and judge one sample.
 
         Return either ``{check_name: Check}`` or ``({check_name: Check}, {artifact: value})``.
         Artifact names should be per-sample (e.g. ``f"duration_s/{sample.sample_id}"``) so
@@ -124,7 +124,7 @@ class SampleKernel(Kernel):
             if not report.is_alive(sample.sample_id):
                 continue  # failed upstream: dropped from this node
             try:
-                result = self.check(sample, art)
+                result = self.sift(sample, art)
                 checks, artifacts = result if isinstance(result, tuple) else (result, {})
             except Exception as e:  # per-sample finding, never a job crash
                 checks, artifacts = {

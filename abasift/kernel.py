@@ -14,9 +14,9 @@ Four classes, three of which a QC author might subclass:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Iterator, Mapping
+from typing import Any, Iterable, Iterator, Mapping
 
-from .data import ArtifactUnion, Sample
+from .data import ArtifactUnion, Batch, Sample
 from .report import Check, ReportExt, ReportView
 
 #: What a kernel adds to the union: ``name -> value``, namespaced by the executor.
@@ -67,16 +67,46 @@ class SourceKernel(_Bound):
         return None
 
 
+def batch_stream(
+    items: Iterable["Sample | tuple[str, Check]"], batch_size: int
+) -> Iterator[tuple[ArtifactExt, ReportExt]]:
+    """Group a loader's normalised output into batches — framework policy, not a vendor's.
+
+    Accepts either a ``Sample`` or an enumeration finding ``(sample_id, Check)``. Findings
+    ride along with the batch under construction, and a trailing batch carrying nothing but
+    findings is still emitted — the edge case every loader would otherwise re-derive.
+
+    A ``SourceKernel`` therefore only has to normalise one vendor layout into samples::
+
+        def iter_batches(self):
+            return batch_stream(self._enumerate(), self.batch_size)
+    """
+    pending: list[Sample] = []
+    rext = ReportExt()
+    index = 0
+    for item in items:
+        if isinstance(item, Sample):
+            pending.append(item)
+        else:
+            sample_id, check = item
+            rext.add(sample_id, "enumerate", check)
+        if len(pending) >= batch_size:
+            yield {"batch": Batch(tuple(pending), index)}, rext
+            pending, rext, index = [], ReportExt(), index + 1
+    if pending or rext.checks:
+        yield {"batch": Batch(tuple(pending), index)}, rext
+
+
 class SampleKernel(Kernel):
     """Per-sample check kernel. Subclasses implement :meth:`check`.
 
     This is where the per-sample failsafe lives, so every check kernel gets it for free.
     """
 
-    #: Fallback check name when the kernel blows up on a sample. Subclasses that define
-    #: ``check_name`` report failures under it instead, so one node always produces one
-    #: check key per sample whether it succeeded or not.
-    error_check_name = "error"
+    #: The check name this kernel reports under — including when it fails, so one node
+    #: always produces exactly one check key per sample whether it succeeded or not.
+    #: Subclasses set it (as a class attribute or in ``__init__``).
+    check_name: str = "check"
 
     def check(self, sample: Sample, art: ArtifactUnion):
         """Judge one sample.
@@ -97,9 +127,8 @@ class SampleKernel(Kernel):
                 result = self.check(sample, art)
                 checks, artifacts = result if isinstance(result, tuple) else (result, {})
             except Exception as e:  # per-sample finding, never a job crash
-                name = getattr(self, "check_name", None) or self.error_check_name
                 checks, artifacts = {
-                    name: Check("error", details={"exception": f"{type(e).__name__}: {e}"})
+                    self.check_name: Check("error", details={"exception": f"{type(e).__name__}: {e}"})
                 }, {}
             rext.checks[sample.sample_id] = dict(checks)
             ext.update(artifacts)

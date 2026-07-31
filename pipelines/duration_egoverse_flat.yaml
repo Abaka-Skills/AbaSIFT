@@ -13,7 +13,7 @@ pipeline:
     - name: load
       kernel: abasift.loaders.FlatDirLoader
       params:
-        root: s3://egocentric-data-delivery/egoverse_test/20260730_test
+        root: s3://egocentric-data-delivery/1_test_20260730
         batch_size: 4
       inputs: []
 

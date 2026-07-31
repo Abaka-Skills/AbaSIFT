@@ -4,7 +4,7 @@ A job is one pipeline YAML run on one machine. Work distribution is external.
 See ``doc/design.md`` for the contract and the decision log.
 """
 
-from . import decoders as _decoders  # noqa: F401  (registers the built-in decoders)
+from . import decoders  # imported for effect: registers the built-in decoders
 from .data import ArtifactUnion, Batch, Sample
 from .errors import AbaSiftError, DecodeError, ExecutorError, MissingStream, PipelineError
 from .executor import Executor, run_pipeline
@@ -23,6 +23,7 @@ __all__ = [
     "Batch",
     "Check",
     "DecodeError",
+    "decoders",
     "Executor",
     "ExecutorError",
     "ImuTrack",

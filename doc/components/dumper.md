@@ -1,6 +1,6 @@
 # DataDumper — the one sanctioned mutator
 
-Module: `src/abasift/kernels/dumper.py`.
+Module: `abasift/kernels/dumper.py`.
 
 Ordinary kernels are extend-only. `DataDumper` is the single exception, and it reaches that
 privilege through a distinct interface (`MutatingKernel.run_mutating` → `Mutation`) rather
@@ -16,9 +16,10 @@ works either way. Memory freed, information preserved.
   lands in RAM — and the replacement keeps the original decoder and opts.
 - `bytes` values are written as `.bin`, anything else as `.json`.
 
-**free** (`target` empty) — drop the matching keys, and delete the backing file *only* if it
-lives inside our own disk cache (path-checked against the cache root, so vendor data is
-never at risk). For intermediates nobody downstream reads.
+**free** (`target` empty) — drop the matching keys and call `DiskCache.forget(uri)` on each,
+which deletes the backing file only if it lives inside the cache root. The dumper does not
+derive that path itself: the key scheme and the "never delete outside the cache" guarantee
+stay in `cache.py`, where they belong. For intermediates nobody downstream reads.
 
 ## Paths are deterministic
 

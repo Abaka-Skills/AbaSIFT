@@ -1,6 +1,6 @@
 # Pipeline + Executor
 
-Modules: `src/abasift/pipeline.py`, `src/abasift/executor.py`.
+Modules: `abasift/pipeline.py`, `abasift/executor.py`.
 
 ## Pipeline: everything fails fast
 

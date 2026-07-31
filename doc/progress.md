@@ -3,7 +3,28 @@
 Status of every component, with a pointer to its own doc. Update this file when a
 component's state changes.
 
-Verification command: `pytest` (56 tests: 52 offline + 4 against the real bucket).
+Verification: `pytest` (71 tests: 67 offline + 4 against the real bucket) and
+`python -m pyflakes abasift test` (clean — no unused or shadowed imports).
+
+## Repo layout
+
+```
+abasift/            the package, flat at the repo root (no src/ indirection)
+  ├─ lazy.py cache.py decoders.py payloads.py     data access
+  ├─ data.py report.py kernel.py errors.py        core contracts
+  ├─ pipeline.py executor.py cli.py               orchestration
+  ├─ kernels/       duration.py imu_spike.py dumper.py
+  ├─ loaders/       flat_dir.py egoverse.py _fs.py (shared listing helpers)
+  └─ vendor/        dji_telemetry.py — the only vendor-format-specific module
+pipelines/          runnable demo YAMLs
+test/               offline suite + s3-marked integration suite
+doc/                design.md, progress.md, components/, uml/ (index.html + mermaid)
+```
+
+Import discipline: modules import *inwards* only — `kernels/` and `loaders/` depend on the
+core (`data`, `report`, `kernel`, `lazy`), never on each other or on the executor. Vendor
+format knowledge is confined to `vendor/`, reached only through a registered decoder, so
+adding a vendor touches `loaders/` + `vendor/` and nothing else.
 
 | # | Component | Module | Doc | State |
 |---|-----------|--------|-----|-------|
@@ -20,7 +41,7 @@ Verification command: `pytest` (56 tests: 52 offline + 4 against the real bucket
 | 11 | DJI telemetry reader | `vendor/dji_telemetry.py` | [dji-telemetry.md](components/dji-telemetry.md) | done |
 | 12 | Demo 1 — duration probe | `kernels/duration.py` | [kernels.md](components/kernels.md) | done, runs on S3 |
 | 13 | Demo 2 — IMU spike | `kernels/imu_spike.py` | [kernels.md](components/kernels.md) | done, runs on S3 |
-| 14 | Tests | `test/` | this file, below | 56 passing |
+| 14 | Tests | `test/` | this file, below | 71 passing |
 
 ## 1. Environment
 
@@ -62,6 +83,7 @@ ABASIFT_TEST_MAX_SAMPLES=50 pytest -m s3 -s     # run wide over the real deliver
 | `test_core.py` | union extend-only/diamond/delete semantics, report aggregation, pipeline validation, `LazyRaw` value semantics + memo |
 | `test_executor.py` | decode sharing across parallel branches, joins, the three failsafe layers, deterministic dump paths |
 | `test_duration_demo.py` | the acceptance test from design §6 (2/5/10 s + corrupt), thresholds-live-in-YAML, CLI |
+| `test_loaders.py` | enumeration findings, ordering, `recursive`/`patterns`, and the shared `batch_stream` grouping rule |
 | `test_imu_spike.py` | spike statistics, verdict thresholds, DJI wire-format round-trip, layout validation, missing-track failsafe |
 | `test_integration_s3.py` | both demos end to end on the vendor bucket; asserts *no* download for header probes and exactly one download for a shared URI |
 

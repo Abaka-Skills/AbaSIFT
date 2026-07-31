@@ -175,6 +175,8 @@ def read_dji_imu(path: str, handler: str = IMU_HANDLER) -> ImuTrack:
             raise MissingStream(f"no {handler!r} track in {path}; tracks present: {present}")
 
         info: dict[str, str] = {}
+        header_tried = False  # not `if not info`: a header we cannot read must not be
+        # retried on all ~2000 packets of the file
         ts_us: list[int] = []
         quats: list[list[float]] = []
         accels: list[list[float]] = []
@@ -183,8 +185,8 @@ def read_dji_imu(path: str, handler: str = IMU_HANDLER) -> ImuTrack:
                 payload = bytes(packet)
                 if not payload:
                     continue
-                if not info:
-                    info = parse_header(payload)
+                if not header_tried:
+                    info, header_tried = parse_header(payload), True
                 frame = parse_frame(payload)
                 if frame is None:
                     continue

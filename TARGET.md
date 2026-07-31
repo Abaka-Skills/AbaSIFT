@@ -50,4 +50,4 @@ support checks for:
 The framework/SDK (data structures, kernel interfaces, YAML pipeline format,
 single-machine executor, datadumper, CLI) plus one demo pipeline that reports
 each video's duration. The agreed design and decision log live in
-[doc/design.md](doc/design.md); diagrams in [doc/uml.md](doc/uml.md).
+[doc/design.md](doc/design.md); diagrams in [doc/uml/](doc/uml/).

@@ -10,8 +10,6 @@ Cost note: it decodes ``video_meta``, which reads the container header over a ra
 
 from __future__ import annotations
 
-from typing import Any
-
 from ..data import ArtifactUnion, Sample
 from ..kernel import ArtifactExt, SampleKernel
 from ..report import Check, ReportExt, ReportView
@@ -52,11 +50,7 @@ class VideoDurationKernel(SampleKernel):
         return {self.check_name: check}, {f"duration_s/{sample.sample_id}": duration}
 
     def finalize(self, art: ArtifactUnion, report: ReportView) -> tuple[ArtifactExt, ReportExt]:
-        durations = {
-            key[len("duration_s/") :]: value
-            for key, value in art.under(self.node_name).items()
-            if key.startswith("duration_s/")
-        }
+        durations = art.per_sample(self.node_name, "duration_s")
         if not durations:
             return {}, ReportExt(summary={"n_videos": 0})
         values = sorted(durations.values())

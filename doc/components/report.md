@@ -1,6 +1,6 @@
 # Report
 
-Module: `src/abasift/report.py`.
+Module: `abasift/report.py`.
 
 ## Division of labour
 

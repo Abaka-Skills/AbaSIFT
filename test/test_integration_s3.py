@@ -23,8 +23,8 @@ from abasift.cache import disk_cache
 
 pytestmark = pytest.mark.s3
 
-FLAT_DATASET = "20260730_test"  # iPhone/Core Media footage, flat directory, no telemetry
-DJI_DATASET = "general_324h"  # DJI Osmo Action, one md5 dir per sample, IMU inside the MP4
+FLAT_DATASET = "1_test_20260730"  # iPhone/Core Media footage, flat directory, no telemetry
+DJI_DATASET = "0_egoverse_20260730"  # DJI Osmo Action, one md5 dir per sample, IMU in the MP4
 
 
 def _n(default: int) -> int:

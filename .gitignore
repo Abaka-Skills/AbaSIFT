@@ -1,0 +1,19 @@
+# Vendor credentials — never commit. See doc/design.md §7.
+test/*.json
+
+**/__pycache__
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.venv/
+env/
+
+# scratch
+/out/
+/tmp/
+*.mp4
+*.MP4
+*.mov
+*.MOV

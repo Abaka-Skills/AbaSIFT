@@ -1,6 +1,6 @@
 # Sample, Batch, ArtifactUnion
 
-Module: `src/abasift/data.py`.
+Module: `abasift/data.py`.
 
 ## Sample and stream naming
 
@@ -38,11 +38,21 @@ duplicates compare equal.
 would be undone by joining with a branch that still carries it. Covered by
 `test_deletion_survives_a_later_join`.
 
+### Reading your own artifacts back
+
+`under(node)` returns one node's namespace. `per_sample(node, name)` is the specialization
+every `finalize()` wants: it undoes the `f"{name}/{sample_id}"` convention that
+`SampleKernel.check` writes, returning `{sample_id: value}`. Kernels use it instead of
+hand-slicing prefixes, so the write-name and the read-name are tied together in one place
+rather than in a string literal repeated across two methods.
+
 ### The batch travels inside the union
 
 The loaded `Batch` lands under the source node's namespace (`load/batch`). One uniform
 kernel signature, no special-cased batch parameter. `art.batch()` finds it by type and
 raises if it is missing or ambiguous, so a kernel never hardcodes the loader's node name.
+`find_batch()` is the same scan returning `None` instead of raising — the executor uses it
+on paths that must not abort the job (logging, marking live samples after a node failure).
 
 `without_transients()` drops `Batch`-valued keys before merging a batch's union into the
 job union. Two reasons: union values are supposed to be primitives or `LazyRaw`, never

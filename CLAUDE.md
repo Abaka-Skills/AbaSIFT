@@ -3,10 +3,10 @@
 Distributed QC framework for egocentric vendor datasets on S3. **Read
 [doc/design.md](doc/design.md) before changing anything** — it is the agreed
 contract spec + decision log; update it when a decision changes.
-[doc/uml.md](doc/uml.md) has the diagrams, [doc/progress.md](doc/progress.md)
+[doc/uml/](doc/uml/) has the diagrams (open `doc/uml/index.html`), [doc/progress.md](doc/progress.md)
 tracks component state, [doc/components/](doc/components/) has per-component detail.
 
-Python package is `abasift` under `src/`; CLI entry point is `abasift`.
+Python package is `abasift/` at the repo root; CLI entry point is `abasift`.
 
 ## The model in five lines
 

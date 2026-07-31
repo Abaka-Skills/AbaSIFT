@@ -127,15 +127,6 @@ class Pipeline:
 
     # -- accessors -------------------------------------------------------
 
-    def node(self, name: str) -> NodeSpec:
-        for n in self.nodes:
-            if n.name == name:
-                return n
-        raise KeyError(name)
-
-    def consumers(self, name: str) -> tuple[str, ...]:
-        return tuple(n.name for n in self.nodes if name in n.inputs)
-
     def to_dict(self) -> dict:
         return {
             "name": self.name,

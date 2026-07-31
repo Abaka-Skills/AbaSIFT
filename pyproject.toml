@@ -15,11 +15,15 @@ dependencies = [
     "PyYAML>=6.0",
 ]
 
+[project.optional-dependencies]
+dev = ["pyflakes>=3.2"]  # import hygiene: python -m pyflakes abasift test
+
 [project.scripts]
 abasift = "abasift.cli:main"
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["."]
+include = ["abasift*"]
 
 [tool.pytest.ini_options]
 testpaths = ["test"]

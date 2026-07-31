@@ -137,16 +137,18 @@ class LazyRaw:
 
     def read_bytes(self, max_bytes: int | None = DEFAULT_MAX_BYTES) -> bytes:
         """Whole object in memory. Guarded: refuses anything larger than ``max_bytes``."""
-        if max_bytes is not None:
-            size = self.size()
-            if size > max_bytes:
-                raise DecodeError(
-                    f"{self.uri} is {size / 2**20:.1f} MiB > max_bytes "
-                    f"{max_bytes / 2**20:.1f} MiB; use local_path() or open() instead"
-                )
         fs, path = self.filesystem()
         try:
+            if max_bytes is not None:
+                size = int(fs.size(path))
+                if size > max_bytes:
+                    raise DecodeError(
+                        f"{self.uri} is {size / 2**20:.1f} MiB > max_bytes "
+                        f"{max_bytes / 2**20:.1f} MiB; use local_path() or open() instead"
+                    )
             return fs.cat_file(path)
+        except DecodeError:
+            raise
         except Exception as e:
             raise DecodeError(f"cannot read {self.uri}: {e}") from e
 

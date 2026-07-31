@@ -217,7 +217,7 @@ Minimal enforced skeleton, free-form leaves:
 
 ## 6. Demo pipelines (the reference implementations)
 
-Both live in `pipelines/` and run against `s3://egocentric-data-delivery/egoverse_test/`.
+Both live in `pipelines/` and run against `s3://egocentric-data-delivery/`.
 The two vendor deliveries there have different layouts and different capabilities, which
 is why there are two loaders — see [components/loaders.md](components/loaders.md).
 
@@ -300,3 +300,13 @@ standard AWS chain only.
 | 21 | Mutation is a separate interface: `MutatingKernel.run_mutating -> Mutation`; deletions recorded in the union so joins can't resurrect them | "Who may rewrite an artifact" becomes a type-level answer, not a convention; and in-place mutation of a union shared by concurrent branches is unsafe |
 | 22 | Two-phase terminal pass: all `finalize()`, then job stats, then `finalize_mutating()` | Otherwise a dumped `report.json` is missing the job block that is written after it |
 | 23 | `SampleKernel` base class owns the per-sample failsafe; failures report under the kernel's own `check_name` | Every check kernel gets drop-on-upstream-error and exception→`error` for free, and a node always contributes exactly one check key per sample |
+| 24 | **Stream registry reduced** to a validated `kind/name` prefix set (`video image audio imu annotation blob`) — §1.2's "every stream type declares required fields (e.g. a common time base)" is **not** implemented | The prefix check catches the actual mistake seen in practice (a loader inventing `telemetry/main`). Declared per-kind required fields would only pay off once a sync kernel exists to consume them. **This is the one place the implementation under-delivers against the agreed design** — flagged, not hidden |
+| 25 | `art.batch()` finds the `Batch` by type, not by a configured key name | A kernel never hardcodes the loader's node name; raises on missing/ambiguous instead of silently reading the wrong thing |
+| 26 | Concrete dump layout `{target}/{job_id}/{node}/{name}` (design only said `f(job_id, node, key)`) | Job-scoped directory keeps a re-run's outputs together and makes an accidental cross-job overwrite impossible |
+| 27 | CLI exit codes: `0` = the job completed and reported (whatever the verdicts), `2` = the YAML is broken | QC failures are data findings, not process failures — an orchestrator must not retry a job because a vendor's video was corrupt |
+| 28 | Loaders take `max_samples` / `order` (`name`\|`size`) / `batch_size` | Cheap probes and cheap tests over a huge delivery. Explicitly **not** sharding: distribution stays external (#13) |
+| 29 | `EgoverseDjiLoader` declares `imu/main` for every sample, even though some vendor files have no telemetry track | Knowing would require opening each object at enumeration time. "Declared but unreadable" already has a right answer (`MissingStream` → `error`), and *which files lack IMU* is a QC result, not a loader precondition |
+| 30 | The reverse-engineered DJI field mapping is guarded by physics (`‖q‖≈1`, median `‖a‖∈[0.5,2] g`, monotonic timestamps) and rejects unrecognised layouts | The mapping is inferred, not specified; a firmware change that moved the fields would otherwise be reported as plausible-looking nonsense. Failing loudly beats mis-measuring |
+| 31 | Spike statistics: median/MAD (not mean/std), scale floor, one impulse counts as **2** spikes, track shorter than `min_samples` → `error` not `pass` | A few large spikes inflate a standard deviation enough to hide themselves. The 2-per-impulse artefact of first differencing is documented rather than smoothed away, so the measurement stays explainable |
+| 32 | Executor scheduling is a driver loop (submit-ready → wait `FIRST_COMPLETED` → fold) rather than level barriers or self-blocking pool tasks | Level barriers waste wall-clock on uneven branches; tasks that block waiting on dependencies can starve the pool. The driver loop has neither failure mode |
+| 33 | Flat package layout (`abasift/` at the repo root, no `src/`), `pyflakes` as a tracked dev dependency | Requested; the linter is tracked so "imports are clean" is checkable rather than asserted |

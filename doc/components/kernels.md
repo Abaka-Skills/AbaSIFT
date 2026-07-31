@@ -1,6 +1,6 @@
 # Kernels: interfaces and the two demo checks
 
-Modules: `src/abasift/kernel.py`, `src/abasift/kernels/`.
+Modules: `abasift/kernel.py`, `abasift/kernels/`.
 
 ## The interfaces
 
@@ -16,13 +16,19 @@ Kernels must never mutate the union or report in place — branches run concurre
 
 `SampleKernel` is where the **per-sample failsafe** lives, so every check kernel inherits it:
 it skips samples already `error` upstream (`report.is_alive`), and turns an exception on one
-sample into `status: error` for that sample under the kernel's own `check_name`. `check()`
+sample into `status: error` for that sample under the kernel's own `check_name` — a declared
+class attribute, so one node always contributes exactly one check key per sample. `check()`
 returns either `{check_name: Check}` or `({check_name: Check}, {artifact_name: value})`.
+
+`SourceKernel` gets the mirror-image helper: `batch_stream(items, batch_size)` groups a
+loader's normalised output into batches, so batching policy lives in the framework rather
+than being copy-pasted into every vendor loader.
 
 Artifact names should be **per-sample** (`f"duration_s/{sample.sample_id}"`) so keys stay
 disjoint across batches and `finalize()` can reduce over them. That is the whole mechanism
-behind dataset-level summaries: `run()` writes per-sample facts, `finalize()` reads its own
-namespace out of the merged job union.
+behind dataset-level summaries: `run()` writes per-sample facts, and `finalize()` reads them
+back with `art.per_sample(self.node_name, "duration_s")` — the accessor that owns the naming
+convention, so the write-name and read-name can't drift apart.
 
 Parameters are declared explicitly — no `**kwargs` catch-all — so a typo in YAML is a
 load-time error instead of a silently defaulted threshold.
@@ -41,7 +47,7 @@ Acceptance (design §6, `test_duration_demo.py`): 2/5/10 s synthesized clips pas
 0.1 s; a deliberately corrupt file is `error` while the job completes; summary numbers
 correct.
 
-Real run over `20260730_test` (53 files, 15.7 GB): **21.6 s**, `pass=50 fail=3 error=0`,
+Real run over `1_test_20260730` (53 files, 15.7 GB): **21.6 s**, `pass=50 fail=3 error=0`,
 total 31118 s of footage, mean 587 s. The three failures are takes longer than the
 `max_s: 1800` the YAML allows (longest 3449 s) — the vendor never split those recordings.
 
@@ -78,7 +84,7 @@ A frozen sensor produces *no* jerk at all and so no spikes; the scale floor keep
 manufacturing false positives. Frozen-value detection is a different defect class and would
 be a sibling kernel.
 
-Real run over `general_324h` (4 smallest samples, `z_thresh: 12`): 2 pass with 0 spikes
+Real run over `0_egoverse_20260730` (4 smallest samples, `z_thresh: 12`): 2 pass with 0 spikes
 (max_z 5.2 and 7.2, median ‖a‖ 0.996 and 1.006 g at 29.97/25.0 Hz), and 2 legitimate errors —
 one file is phone-recorded with no `DJI meta` track (`MissingStream`), one is a 1.6 s clip
 with ~48 records, below `min_samples`. The job completed and reported all four.

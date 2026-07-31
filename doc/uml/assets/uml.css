@@ -1,0 +1,104 @@
+/* AbaSift architecture diagrams — page + shared SVG vocabulary. */
+
+:root {
+  --bg: #ffffff; --fg: #1a1d21; --muted: #5b6470; --faint: #8b95a1;
+  --line: #b8c0cb; --box: #f6f8fa; --edge: #6b7683;
+  --core: #e8f0fe; --core-b: #4a7fd4;
+  --kern: #eaf5ec; --kern-b: #3f9155;
+  --vend: #fdf0e4; --vend-b: #c07a2c;
+  --exec: #f2ecfb; --exec-b: #7c5bbd;
+  --warn: #fdecec; --warn-b: #c04a4a;
+  --code: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+
+/* dark values live in one place; applied by preference or by the toggle */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14171a; --fg: #e6e9ed; --muted: #a3adb8; --faint: #7d8792;
+    --line: #3c454f; --box: #1d2126; --edge: #8b95a1;
+    --core: #16283f; --core-b: #5b93e6;
+    --kern: #16301e; --kern-b: #57b06f;
+    --vend: #33240f; --vend-b: #d69440;
+    --exec: #241a3a; --exec-b: #9a7be0;
+    --warn: #331717; --warn-b: #d96a6a;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #14171a; --fg: #e6e9ed; --muted: #a3adb8; --faint: #7d8792;
+  --line: #3c454f; --box: #1d2126; --edge: #8b95a1;
+  --core: #16283f; --core-b: #5b93e6;
+  --kern: #16301e; --kern-b: #57b06f;
+  --vend: #33240f; --vend-b: #d69440;
+  --exec: #241a3a; --exec-b: #9a7be0;
+  --warn: #331717; --warn-b: #d96a6a;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 2.5rem 1.5rem 6rem;
+  background: var(--bg); color: var(--fg);
+  font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+main { max-width: 1120px; margin: 0 auto; }
+h1 { font-size: 1.9rem; margin: 0 0 .3rem; letter-spacing: -.02em; }
+h2 {
+  font-size: 1.15rem; margin: 3.5rem 0 .4rem; padding-top: 1.2rem;
+  border-top: 1px solid var(--line); letter-spacing: -.01em;
+  scroll-margin-top: 1rem;
+}
+h2 .num { color: var(--faint); font-variant-numeric: tabular-nums; margin-right: .5rem; }
+.sub { color: var(--muted); margin: 0 0 1.4rem; font-size: .94rem; max-width: 74ch; }
+.lede { color: var(--muted); font-size: 1rem; max-width: 78ch; margin: 0 0 1rem; }
+figure { margin: 0 0 .6rem; overflow-x: auto; }
+svg.diagram { width: 100%; height: auto; min-width: 720px; display: block; }
+code { font-family: var(--code); font-size: .89em; background: var(--box);
+       border: 1px solid var(--line); border-radius: 4px; padding: .05em .35em; }
+a { color: inherit; }
+
+.top { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+#theme {
+  flex: none; font: inherit; font-size: .8rem; color: var(--muted);
+  background: var(--box); border: 1px solid var(--line); border-radius: 999px;
+  padding: .25rem .8rem; cursor: pointer;
+}
+#theme:hover { color: var(--fg); border-color: var(--edge); }
+
+.nav { display: flex; flex-wrap: wrap; gap: .45rem; margin: 1.4rem 0 0; }
+.nav a {
+  font-size: .82rem; text-decoration: none; color: var(--muted);
+  border: 1px solid var(--line); border-radius: 999px; padding: .22rem .7rem;
+}
+.nav a:hover { color: var(--fg); border-color: var(--edge); }
+.nav a.active { color: var(--fg); border-color: var(--edge); background: var(--box); }
+
+.note {
+  font-size: .88rem; color: var(--muted); border-left: 3px solid var(--line);
+  padding: .1rem 0 .1rem .9rem; margin: .9rem 0 0; max-width: 80ch;
+}
+.legend { display: flex; flex-wrap: wrap; gap: 1rem; font-size: .82rem;
+          color: var(--muted); margin: 1rem 0 0; }
+.legend span { display: inline-flex; align-items: center; gap: .4rem; }
+.swatch { width: 13px; height: 13px; border-radius: 3px; border: 1.5px solid; }
+footer { margin-top: 4rem; padding-top: 1.2rem; border-top: 1px solid var(--line);
+         color: var(--faint); font-size: .84rem; }
+
+/* --- shared SVG vocabulary --- */
+.diagram text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+.t  { font-size: 14px; font-weight: 640; fill: var(--fg); }
+.t2 { font-size: 12.5px; font-weight: 640; fill: var(--fg); }
+.m  { font-size: 12px; fill: var(--muted); font-family: var(--code) !important; }
+.lbl{ font-size: 11.5px; fill: var(--muted); }
+.lbl-i { font-size: 11.5px; fill: var(--faint); font-style: italic; }
+.num-b { font-size: 12.5px; font-weight: 700; fill: var(--fg); font-family: var(--code) !important; }
+.box   { fill: var(--box); stroke: var(--line); stroke-width: 1.5; }
+.b-core{ fill: var(--core); stroke: var(--core-b); stroke-width: 1.5; }
+.b-kern{ fill: var(--kern); stroke: var(--kern-b); stroke-width: 1.5; }
+.b-vend{ fill: var(--vend); stroke: var(--vend-b); stroke-width: 1.5; }
+.b-exec{ fill: var(--exec); stroke: var(--exec-b); stroke-width: 1.5; }
+.b-warn{ fill: var(--warn); stroke: var(--warn-b); stroke-width: 1.5; }
+.b-dash{ fill: none; stroke: var(--line); stroke-width: 1.5; stroke-dasharray: 5 4; }
+.sep { stroke: var(--line); stroke-width: 1; }
+.edge{ stroke: var(--edge); stroke-width: 1.6; fill: none;
+       stroke-linejoin: round; stroke-linecap: round; }
+.edge-d { stroke: var(--edge); stroke-width: 1.4; fill: none; stroke-dasharray: 4 4;
+          stroke-linejoin: round; stroke-linecap: round; }

@@ -9,7 +9,6 @@ import numpy as np
 
 from abasift import (
     ArtifactUnion,
-    Batch,
     Check,
     Kernel,
     LazyRaw,
@@ -19,6 +18,7 @@ from abasift import (
     SampleKernel,
     SourceKernel,
 )
+from abasift.kernel import batch_stream
 from abasift.lazy import register_decoder
 from abasift.payloads import ImuTrack
 
@@ -41,17 +41,13 @@ class SyntheticLoader(SourceKernel):
         self.decoder = decoder
 
     def iter_batches(self) -> Iterator[tuple[dict[str, Any], ReportExt]]:
-        pending: list[Sample] = []
-        index = 0
-        for i in range(self.n):
-            pending.append(
+        return batch_stream(
+            (
                 Sample(f"s{i}", {"blob/main": LazyRaw(f"mem://sample/{i}", self.decoder)})
-            )
-            if len(pending) >= self.batch_size:
-                yield {"batch": Batch(tuple(pending), index)}, ReportExt()
-                pending, index = [], index + 1
-        if pending:
-            yield {"batch": Batch(tuple(pending), index)}, ReportExt()
+                for i in range(self.n)
+            ),
+            self.batch_size,
+        )
 
 
 class TouchKernel(SampleKernel):

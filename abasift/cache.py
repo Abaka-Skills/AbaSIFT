@@ -109,10 +109,21 @@ class DiskCache:
                 pass
         return freed
 
-    def clear(self) -> None:
-        for p in self.root.iterdir():
-            if p.is_file():
-                p.unlink(missing_ok=True)
+    def forget(self, uri: str) -> bool:
+        """Drop this URI's cached copy; ``True`` if a file was removed.
+
+        Freeing an artifact goes through here rather than deriving the path at the call
+        site, so the key scheme and the "never delete outside the cache root" guarantee
+        stay in one place.
+        """
+        path = self.root / self.key_for(uri)
+        try:
+            if path.parent.resolve() != self.root.resolve():
+                return False
+            path.unlink()
+            return True
+        except OSError:
+            return False
 
 
 def _touch(path: Path) -> None:

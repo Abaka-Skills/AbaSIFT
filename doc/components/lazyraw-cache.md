@@ -1,6 +1,6 @@
 # LazyRaw + the two-tier cache
 
-Modules: `src/abasift/lazy.py`, `src/abasift/cache.py`, `src/abasift/decoders.py`.
+Modules: `abasift/lazy.py`, `abasift/cache.py`, `abasift/decoders.py`.
 
 ## The question this component answers
 
@@ -9,7 +9,7 @@ files, another is ~1000 files of similar size. So: do we hold payloads in memory
 them on disk and let kernels work on files?
 
 The answer is **both, chosen per decoder**, because the two demo checks sit at opposite
-ends. Measured on `general_324h/0008ac4e.../DJI_20260319133058_0116_D.MP4` (177.9 MB),
+ends. Measured on `0_egoverse_20260730/0008ac4e.../DJI_20260319133058_0116_D.MP4` (177.9 MB),
 reading through a seeking fsspec file object:
 
 | what | bytes pulled | read calls | wall clock |

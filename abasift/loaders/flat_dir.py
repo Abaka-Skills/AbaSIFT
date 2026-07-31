@@ -1,7 +1,7 @@
 """``FlatDirLoader`` — one media file per sample, from a directory.
 
 Works unchanged on a local path or an ``s3://`` prefix (fsspec), which is why it serves
-both the unit tests and the ``egoverse_test/20260730_test`` vendor delivery: a flat
+both the unit tests and the ``1_test_20260730`` vendor delivery: a flat
 directory of ``VID_*.mp4`` / ``*.mov`` with no sidecars and no telemetry track.
 """
 
@@ -9,14 +9,15 @@ from __future__ import annotations
 
 import fnmatch
 import posixpath
-from typing import Any, Iterator
+from typing import Iterator
 
 import fsspec
 
-from ..data import Batch, Sample
-from ..kernel import SourceKernel
+from ..data import Sample
+from ..kernel import ArtifactExt, SourceKernel, batch_stream
 from ..lazy import LazyRaw
 from ..report import Check, ReportExt
+from ._fs import check_order, list_files
 
 DEFAULT_PATTERNS = ("*.mp4", "*.MP4", "*.mov", "*.MOV", "*.mkv", "*.avi")
 
@@ -49,52 +50,34 @@ class FlatDirLoader(SourceKernel):
         self.batch_size = int(batch_size)
         self.patterns = tuple(patterns)
         self.recursive = bool(recursive)
-        self.order = order
+        self.order = check_order(order)
         self.max_samples = max_samples
         self.stream = stream
         self.decoder = decoder
-        if order not in ("name", "size"):
-            raise ValueError(f"order must be 'name' or 'size', got {order!r}")
 
-    def iter_batches(self) -> Iterator[tuple[dict[str, Any], ReportExt]]:
+    def iter_batches(self) -> Iterator[tuple[ArtifactExt, ReportExt]]:
+        return batch_stream(self._enumerate(), self.batch_size)
+
+    def _enumerate(self) -> Iterator[Sample | tuple[str, Check]]:
+        """One media file -> one sample; the framework does the batching."""
         fs, base = fsspec.core.url_to_fs(self.root)
-        entries = _list(fs, base, self.recursive)
-        media = [e for e in entries if _matches(e["name"], self.patterns)]
+        media = [e for e in list_files(fs, base, self.recursive) if _matches(e["name"], self.patterns)]
         media.sort(key=(lambda e: e["size"]) if self.order == "size" else (lambda e: e["name"]))
         if self.max_samples is not None:
             media = media[: self.max_samples]
 
-        pending: list[Sample] = []
-        rext = ReportExt()
-        index = 0
         for entry in media:
             sample_id = _sample_id(base, entry["name"])
             if not entry["size"]:
                 # Enumeration finding: nothing to decode, and we knew before opening it.
-                rext.add(sample_id, "enumerate", Check("error", details={"reason": "zero-size file"}))
+                yield sample_id, Check("error", details={"reason": "zero-size file"})
                 continue
-            pending.append(
-                Sample(
-                    sample_id=sample_id,
-                    streams={self.stream: LazyRaw(fs.unstrip_protocol(entry["name"]), self.decoder)},
-                    meta={"uri": fs.unstrip_protocol(entry["name"]), "size_bytes": entry["size"]},
-                )
+            uri = fs.unstrip_protocol(entry["name"])
+            yield Sample(
+                sample_id=sample_id,
+                streams={self.stream: LazyRaw(uri, self.decoder)},
+                meta={"uri": uri, "size_bytes": entry["size"]},
             )
-            if len(pending) >= self.batch_size:
-                yield {"batch": Batch(tuple(pending), index)}, rext
-                pending, rext, index = [], ReportExt(), index + 1
-        if pending or rext.checks:
-            yield {"batch": Batch(tuple(pending), index)}, rext
-
-
-def _list(fs, base: str, recursive: bool) -> list[dict]:
-    detail = fs.find(base, detail=True) if recursive else fs.ls(base, detail=True)
-    entries = detail.values() if isinstance(detail, dict) else detail
-    return [
-        {"name": e["name"], "size": int(e.get("size") or 0)}
-        for e in entries
-        if e.get("type", "file") == "file"
-    ]
 
 
 def _matches(path: str, patterns: tuple[str, ...]) -> bool:

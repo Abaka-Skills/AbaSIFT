@@ -28,13 +28,12 @@ import logging
 import os
 import platform
 import socket
-import sys
 import time
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from datetime import datetime, timezone
 from typing import Any, Iterator
 
-from .data import ArtifactUnion, Batch
+from .data import ArtifactUnion
 from .errors import ExecutorError
 from .kernel import MutatingKernel, SourceKernel
 from .pipeline import Pipeline
@@ -78,14 +77,14 @@ class Executor:
         with ThreadPoolExecutor(max_workers=self.max_workers, thread_name_prefix="abasift") as pool:
             for batch_ext, batch_rext in self._iter_source(source, report):
                 n_batches += 1
-                batch = _find_batch(batch_ext)
+                src_art = ArtifactUnion().extended(p.source, batch_ext)
+                batch = src_art.find_batch()
                 log.info(
                     "batch %d: %d samples (%s)",
                     n_batches,
                     len(batch) if batch else 0,
                     ", ".join(batch.ids[:3]) + ("..." if batch and len(batch) > 3 else "") if batch else "-",
                 )
-                src_art = ArtifactUnion().extended(p.source, batch_ext)
                 src_rep = Report()
                 src_rep.apply(p.source, batch_rext)
 
@@ -213,19 +212,9 @@ def _report_of(reports) -> Report:
     return out
 
 
-def _find_batch(ext: dict[str, Any]) -> Batch | None:
-    for v in ext.values():
-        if isinstance(v, Batch):
-            return v
-    return None
-
-
 def _live_ids(art: ArtifactUnion, view: ReportView) -> list[str]:
-    try:
-        batch = art.batch()
-    except ExecutorError:
-        return []
-    return [s.sample_id for s in batch if view.is_alive(s.sample_id)]
+    batch = art.find_batch()
+    return [s.sample_id for s in batch if view.is_alive(s.sample_id)] if batch else []
 
 
 def _utc(ts: float) -> str:

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Create (or update) the abasift conda env and install ego_qa in editable mode.
+# Create (or update) the abasift conda env and install the package in editable mode.
 #   bash setup.sh          # then: conda activate abasift
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -14,7 +14,7 @@ else
   conda env create -f environment.yml
 fi
 
-echo ">> installing ego_qa (editable)"
+echo ">> installing abasift (editable)"
 conda run -n "$ENV_NAME" python -m pip install -e . --no-deps
 
 echo

@@ -1,4 +1,4 @@
-# Demo 2 — IMU spike check over the egoverse DJI delivery (general_324h).
+# Demo 2 — IMU spike check over the egoverse DJI delivery (0_egoverse_20260730).
 #
 # The IMU has no sidecar file: it is a `DJI meta` data track inside the MP4. The vendor
 # loader declares `imu/main` over the *same URI* as `video/main` with the `dji_imu`
@@ -16,7 +16,7 @@ pipeline:
     - name: load
       kernel: abasift.loaders.EgoverseDjiLoader
       params:
-        root: s3://egocentric-data-delivery/egoverse_test/general_324h
+        root: s3://egocentric-data-delivery/0_egoverse_20260730
         batch_size: 2       # each sample materialises a whole video; keep it small
         order: size         # ascending: cheapest samples first
         max_samples: 4

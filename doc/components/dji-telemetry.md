@@ -1,15 +1,15 @@
 # DJI embedded telemetry — reverse-engineering log
 
-Module: `src/abasift/vendor/dji_telemetry.py`. Consumed via the `dji_imu` decoder.
+Module: `abasift/vendor/dji_telemetry.py`. Consumed via the `dji_imu` decoder.
 
 ## The problem
 
-The `general_324h` delivery has no IMU sidecar. The inertial data is **inside the MP4**, so
+The `0_egoverse_20260730` delivery has no IMU sidecar. The inertial data is **inside the MP4**, so
 "write a suitable dataloader for that vendor" means understanding the container.
 
 ## What is in the container
 
-`ffprobe` on `general_324h/0008ac4e.../DJI_20260319133058_0116_D.MP4` — six tracks:
+`ffprobe` on `0_egoverse_20260730/0008ac4e.../DJI_20260319133058_0116_D.MP4` — six tracks:
 
 | idx | type | tag | handler | rate | content |
 |-----|------|-----|---------|------|---------|

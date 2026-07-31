@@ -21,12 +21,14 @@ from __future__ import annotations
 
 import fnmatch
 import json
+import posixpath
 import shutil
 from typing import Any
 
 import fsspec
 
-from ..data import ArtifactUnion, _jsonable
+from ..cache import disk_cache
+from ..data import ArtifactUnion, jsonable
 from ..kernel import Mutation, MutatingKernel
 from ..lazy import LazyRaw
 from ..report import ReportView
@@ -55,9 +57,10 @@ class DataDumper(MutatingKernel):
         if not matched:
             return Mutation()
         if not self.target:
-            freed = {k: art[k] for k in matched}
-            for value in freed.values():
-                _free_cached_file(value)
+            for key in matched:
+                value = art[key]
+                if isinstance(value, LazyRaw):
+                    disk_cache().forget(value.uri)
             return Mutation(delete=frozenset(matched))
         replace = {key: self._dump(key, art[key]) for key in matched}
         return Mutation(replace=replace)
@@ -95,7 +98,7 @@ class DataDumper(MutatingKernel):
         if isinstance(value, (bytes, bytearray)):
             uri = self._write_bytes(self.path_for(f"{name}.bin"), bytes(value))
             return LazyRaw(uri, "bytes")
-        uri = self._write_json(self.path_for(f"{name}.json"), _jsonable(value))
+        uri = self._write_json(self.path_for(f"{name}.json"), jsonable(value))
         return LazyRaw(uri, "json")
 
     def _copy_stream(self, raw: LazyRaw, uri: str) -> str:
@@ -118,24 +121,7 @@ class DataDumper(MutatingKernel):
 
 
 def _makedirs(fs, path: str) -> None:
-    parent = path.rsplit("/", 1)[0]
     try:
-        fs.makedirs(parent, exist_ok=True)
+        fs.makedirs(posixpath.dirname(path), exist_ok=True)
     except Exception:
         pass  # object stores have no directories
-
-
-def _free_cached_file(value: Any) -> None:
-    """Delete a freed artifact's backing file, but only inside our own disk cache."""
-    if not isinstance(value, LazyRaw):
-        return
-    from ..cache import disk_cache
-
-    cache = disk_cache()
-    root = cache.root.resolve()
-    candidate = root / cache.key_for(value.uri)
-    try:
-        if candidate.resolve().is_relative_to(root) and candidate.exists():
-            candidate.unlink()
-    except OSError:
-        pass

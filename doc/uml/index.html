@@ -1,0 +1,577 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AbaSift — architecture diagrams</title>
+<link rel="stylesheet" href="assets/uml.css">
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <marker id="arw" viewBox="0 0 10 10" refX="9.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="var(--edge)"/>
+    </marker>
+    <marker id="dia" viewBox="0 0 12 12" refX="11.5" refY="6" markerWidth="10" markerHeight="10" orient="auto">
+      <path d="M0,6 L6,2 L12,6 L6,10 z" fill="var(--bg)" stroke="var(--edge)" stroke-width="1.4"/>
+    </marker>
+    <marker id="tri" viewBox="0 0 12 12" refX="11.5" refY="6" markerWidth="11" markerHeight="11" orient="auto">
+      <path d="M0,1 L12,6 L0,11 z" fill="var(--bg)" stroke="var(--edge)" stroke-width="1.4"/>
+    </marker>
+  </defs>
+</svg>
+
+<main>
+  <div class="top">
+    <h1>AbaSift — architecture diagrams</h1>
+    <button id="theme" type="button">theme: auto</button>
+  </div>
+  <p class="lede">
+    Distributed QC framework for egocentric vendor datasets. A <strong>job</strong> is one pipeline
+    YAML run on one machine; work distribution is external. These are the six views that matter
+    for review. Text sources for the same architecture live in
+    <code>doc/uml/README.md</code>; the contract and decision log are in <code>doc/design.md</code>.
+  </p>
+
+  <nav class="nav">
+    <a href="#layers">1 · module layers</a>
+    <a href="#data">2 · data plane</a>
+    <a href="#control">3 · control plane</a>
+    <a href="#flow">4 · execution flow</a>
+    <a href="#access">5 · access modes</a>
+    <a href="#failsafe">6 · failsafe layers</a>
+  </nav>
+
+  <div class="legend">
+    <span><i class="swatch" style="background:var(--core);border-color:var(--core-b)"></i> core contracts</span>
+    <span><i class="swatch" style="background:var(--exec);border-color:var(--exec-b)"></i> orchestration</span>
+    <span><i class="swatch" style="background:var(--kern);border-color:var(--kern-b)"></i> kernels &amp; loaders</span>
+    <span><i class="swatch" style="background:var(--vend);border-color:var(--vend-b)"></i> vendor-specific</span>
+    <span><i class="swatch" style="background:var(--warn);border-color:var(--warn-b)"></i> failure path</span>
+  </div>
+
+  <!-- ============================ 1 ============================ -->
+  <h2 id="layers"><span class="num">1</span>Module layers — imports point one way</h2>
+  <p class="sub">
+    Kernels and loaders depend on the core contracts and on nothing else — never on the executor,
+    never on each other. Vendor format knowledge is a leaf, reached only through a registered
+    decoder, so adding a vendor touches <code>loaders/</code> + <code>vendor/</code> and stops there.
+  </p>
+  <figure>
+  <svg class="diagram" viewBox="0 0 960 480" role="img" aria-label="Module layer diagram">
+    <rect class="b-exec" x="370" y="16" width="220" height="52" rx="7"/>
+    <text class="t" x="480" y="39" text-anchor="middle">cli.py</text>
+    <text class="lbl" x="480" y="56" text-anchor="middle">abasift run | validate</text>
+
+    <rect class="b-exec" x="230" y="116" width="210" height="52" rx="7"/>
+    <text class="t" x="335" y="139" text-anchor="middle">pipeline.py</text>
+    <text class="lbl" x="335" y="156" text-anchor="middle">YAML → validated DAG</text>
+
+    <rect class="b-exec" x="520" y="116" width="210" height="52" rx="7"/>
+    <text class="t" x="625" y="139" text-anchor="middle">executor.py</text>
+    <text class="lbl" x="625" y="156" text-anchor="middle">per-batch streaming, threads</text>
+
+    <rect class="b-kern" x="110" y="216" width="290" height="66" rx="7"/>
+    <text class="t" x="255" y="239" text-anchor="middle">kernels/</text>
+    <text class="m" x="255" y="258" text-anchor="middle">duration · imu_spike · dumper</text>
+    <text class="lbl" x="255" y="274" text-anchor="middle">what to check, and how strictly</text>
+
+    <rect class="b-kern" x="560" y="216" width="290" height="66" rx="7"/>
+    <text class="t" x="705" y="239" text-anchor="middle">loaders/</text>
+    <text class="m" x="705" y="258" text-anchor="middle">flat_dir · egoverse</text>
+    <text class="lbl" x="705" y="274" text-anchor="middle">vendor layout → canonical streams</text>
+
+    <rect class="b-core" x="110" y="320" width="740" height="76" rx="7"/>
+    <text class="t" x="480" y="344" text-anchor="middle">core contracts</text>
+    <text class="m" x="480" y="365" text-anchor="middle">data.py · report.py · kernel.py · lazy.py · payloads.py · errors.py</text>
+    <text class="m" x="480" y="383" text-anchor="middle">cache.py · decoders.py</text>
+
+    <rect class="b-vend" x="330" y="428" width="300" height="36" rx="7"/>
+    <text class="t2" x="480" y="451" text-anchor="middle">vendor/dji_telemetry.py</text>
+
+    <!-- edges: orthogonal; the two long ones take a lane outside the stack -->
+    <path class="edge" d="M430,68 V92 H335 V116" marker-end="url(#arw)"/>
+    <path class="edge" d="M530,68 V92 H625 V116" marker-end="url(#arw)"/>
+    <path class="edge" d="M440,142 H520" marker-end="url(#arw)"/>
+    <path class="edge" d="M300,168 V192 H255 V216" marker-end="url(#arw)"/>
+    <path class="edge" d="M660,168 V192 H705 V216" marker-end="url(#arw)"/>
+    <path class="edge" d="M255,282 V320" marker-end="url(#arw)"/>
+    <path class="edge" d="M705,282 V320" marker-end="url(#arw)"/>
+    <path class="edge" d="M730,142 H880 V358 H850" marker-end="url(#arw)"/>
+    <path class="edge" d="M230,142 H80 V358 H110" marker-end="url(#arw)"/>
+    <path class="edge" d="M480,396 V428" marker-end="url(#arw)"/>
+
+    <text class="lbl-i" x="900" y="250" text-anchor="middle">imports</text>
+    <text class="lbl-i" x="52" y="250" text-anchor="middle">imports</text>
+    <text class="lbl" x="492" y="416" text-anchor="start">decoders.py only</text>
+  </svg>
+  </figure>
+  <p class="note">
+    The one upward-looking edge is <code>decoders.py → vendor/</code>: the registry imports the DJI
+    reader so a <code>LazyRaw</code> can name <code>"dji_imu"</code> as a plain string. That keeps
+    vendor code out of every other module, at the price of one import the layering would otherwise
+    forbid.
+  </p>
+
+  <!-- ============================ 2 ============================ -->
+  <h2 id="data"><span class="num">2</span>Data plane — what flows through the DAG</h2>
+  <p class="sub">
+    <code>LazyRaw</code> is <em>uri + decoder name + opts</em>: serializable, cheap to enumerate by
+    the million, and nothing is fetched until a kernel asks. Everything downstream of it is a
+    decoded payload type that check kernels can be written against without knowing the vendor.
+  </p>
+  <figure>
+  <svg class="diagram" viewBox="0 0 1000 570" role="img" aria-label="Data plane class diagram">
+    <rect class="b-core" x="30" y="30" width="250" height="172" rx="7"/>
+    <text class="t" x="46" y="52">LazyRaw</text>
+    <line class="sep" x1="30" y1="62" x2="280" y2="62"/>
+    <text class="m" x="46" y="82">uri: str</text>
+    <text class="m" x="46" y="100">decoder: str</text>
+    <text class="m" x="46" y="118">opts: dict</text>
+    <line class="sep" x1="30" y1="130" x2="280" y2="130"/>
+    <text class="m" x="46" y="150">open() → seekable</text>
+    <text class="m" x="46" y="168">local_path() → str</text>
+    <text class="m" x="46" y="186">decode() · release()</text>
+
+    <rect class="b-core" x="30" y="236" width="250" height="112" rx="7"/>
+    <text class="t" x="46" y="258">DiskCache</text>
+    <text class="lbl-i" x="152" y="258">tier 1</text>
+    <line class="sep" x1="30" y1="268" x2="280" y2="268"/>
+    <text class="m" x="46" y="288">worker-global, LRU</text>
+    <text class="m" x="46" y="306">materialize(uri, fetch)</text>
+    <text class="m" x="46" y="324">atomic .part rename</text>
+    <text class="m" x="46" y="342">per-URI lock</text>
+
+    <rect class="b-core" x="30" y="382" width="250" height="112" rx="7"/>
+    <text class="t" x="46" y="404">DECODERS registry</text>
+    <line class="sep" x1="30" y1="414" x2="280" y2="414"/>
+    <text class="m" x="46" y="434">video_meta · video_file</text>
+    <text class="m" x="46" y="452">dji_imu · json · bytes</text>
+    <text class="lbl" x="46" y="476">@register_decoder(name)</text>
+
+    <rect class="b-core" x="372" y="30" width="256" height="118" rx="7"/>
+    <text class="t" x="388" y="52">Sample</text>
+    <line class="sep" x1="372" y1="62" x2="628" y2="62"/>
+    <text class="m" x="388" y="82">sample_id: str</text>
+    <text class="m" x="388" y="100">streams: {name → LazyRaw}</text>
+    <text class="m" x="388" y="118">meta: dict</text>
+    <text class="lbl" x="388" y="138">name = "kind/name", validated</text>
+
+    <rect class="b-core" x="372" y="186" width="256" height="96" rx="7"/>
+    <text class="t" x="388" y="208">Batch</text>
+    <line class="sep" x1="372" y1="218" x2="628" y2="218"/>
+    <text class="m" x="388" y="238">samples: tuple · index: int</text>
+    <text class="m" x="388" y="256">release()</text>
+    <text class="lbl" x="388" y="274">efficiency unit only</text>
+
+    <rect class="b-core" x="372" y="320" width="256" height="184" rx="7"/>
+    <text class="t" x="388" y="342">ArtifactUnion</text>
+    <line class="sep" x1="372" y1="352" x2="628" y2="352"/>
+    <text class="m" x="388" y="372">"node/name" → value</text>
+    <text class="m" x="388" y="390">deleted: frozenset</text>
+    <line class="sep" x1="372" y1="402" x2="628" y2="402"/>
+    <text class="m" x="388" y="422">extended(node, ext)</text>
+    <text class="m" x="388" y="440">union(other)</text>
+    <text class="m" x="388" y="458">with_mutations(...)</text>
+    <text class="m" x="388" y="476">batch() · per_sample(...)</text>
+    <text class="lbl" x="388" y="496">extend-only · immutable</text>
+
+    <rect class="b-core" x="722" y="30" width="248" height="112" rx="7"/>
+    <text class="t" x="738" y="52">VideoMeta</text>
+    <line class="sep" x1="722" y1="62" x2="970" y2="62"/>
+    <text class="m" x="738" y="82">duration_s · container</text>
+    <text class="m" x="738" y="100">video · audio</text>
+    <text class="m" x="738" y="118">data_tracks: tuple</text>
+
+    <rect class="b-core" x="722" y="180" width="248" height="130" rx="7"/>
+    <text class="t" x="738" y="202">ImuTrack</text>
+    <line class="sep" x1="722" y1="212" x2="970" y2="212"/>
+    <text class="m" x="738" y="232">t: ndarray (s)</text>
+    <text class="m" x="738" y="250">accel_g: ndarray (N,3)</text>
+    <text class="m" x="738" y="268">quat: ndarray (N,4)</text>
+    <text class="m" x="738" y="286">rate_hz · magnitude_g()</text>
+    <text class="lbl" x="738" y="304">device · layout (provenance)</text>
+
+    <rect class="b-vend" x="722" y="350" width="248" height="104" rx="7"/>
+    <text class="t2" x="738" y="372">vendor/dji_telemetry</text>
+    <line class="sep" x1="722" y1="382" x2="970" y2="382"/>
+    <text class="m" x="738" y="402">read_dji_imu(path)</text>
+    <text class="m" x="738" y="420">parse_frame · parse_header</text>
+    <text class="m" x="738" y="438">_validate_layout ⚠</text>
+
+    <!-- composition: the diamond sits on the owner -->
+    <path class="edge" d="M280,100 H372" marker-end="url(#dia)"/>
+    <text class="lbl" x="326" y="92" text-anchor="middle">streams</text>
+    <path class="edge" d="M500,148 V186" marker-end="url(#dia)"/>
+    <text class="lbl" x="510" y="172">n samples</text>
+    <path class="edge" d="M500,282 V320" marker-end="url(#dia)"/>
+    <text class="lbl" x="510" y="306">load/batch</text>
+
+    <!-- access paths, in the lane right of the left column -->
+    <path class="edge" d="M155,202 V236" marker-end="url(#arw)"/>
+    <text class="lbl" x="165" y="226">local_path()</text>
+    <path class="edge" d="M280,180 H310 V438 H280" marker-end="url(#arw)"/>
+    <text class="lbl" x="318" y="310">decode()</text>
+
+    <!-- decoders → payload types: under the middle column, up the middle lane -->
+    <path class="edge-d" d="M155,494 V536 H675 V100 H722" marker-end="url(#arw)"/>
+    <path class="edge-d" d="M675,240 H722" marker-end="url(#arw)"/>
+    <path class="edge-d" d="M675,400 H722" marker-end="url(#arw)"/>
+    <text class="lbl" x="410" y="528" text-anchor="middle">each decoder returns one typed payload</text>
+    <text class="lbl" x="718" y="90" text-anchor="end">returns</text>
+    <text class="lbl" x="718" y="232" text-anchor="end">returns</text>
+    <text class="lbl" x="718" y="392" text-anchor="end">calls</text>
+
+    <path class="edge" d="M846,350 V310" marker-end="url(#arw)"/>
+    <text class="lbl" x="856" y="334">builds</text>
+  </svg>
+  </figure>
+  <p class="note">
+    <code>ArtifactUnion</code> holds the <code>Batch</code> under the source node's namespace
+    (<code>load/batch</code>) — one uniform kernel signature, no special-cased batch parameter.
+    It is dropped when a batch's union is merged into the job union: it is a live object and would
+    otherwise collide across batches on the same key.
+  </p>
+
+  <!-- ============================ 3 ============================ -->
+  <h2 id="control"><span class="num">3</span>Control plane — kernels, pipeline, report</h2>
+  <p class="sub">
+    Four kernel classes, three of which a QC author might subclass. Inputs are read-only; kernels
+    return only extensions and the executor namespaces and merges them.
+  </p>
+  <figure>
+  <svg class="diagram" viewBox="0 0 1080 560" role="img" aria-label="Control plane class diagram">
+    <!-- inheritance tree: each level indents, siblings share one generalization bus -->
+    <rect class="b-dash" x="24" y="24" width="270" height="52" rx="7"/>
+    <text class="t2" x="40" y="46">_Bound</text>
+    <text class="lbl" x="40" y="66">node_name · job · params (injected)</text>
+
+    <rect class="b-kern" x="54" y="104" width="270" height="80" rx="7"/>
+    <text class="t" x="70" y="126">SourceKernel</text>
+    <line class="sep" x1="54" y1="136" x2="324" y2="136"/>
+    <text class="m" x="70" y="156">iter_batches() → yields</text>
+    <text class="m" x="70" y="174">(ArtifactExt, ReportExt)</text>
+
+    <rect class="b-kern" x="54" y="208" width="270" height="80" rx="7"/>
+    <text class="t" x="70" y="230">Kernel</text>
+    <line class="sep" x1="54" y1="240" x2="324" y2="240"/>
+    <text class="m" x="70" y="260">run(art, report)</text>
+    <text class="m" x="70" y="278">finalize(art, report)</text>
+
+    <rect class="b-kern" x="84" y="312" width="270" height="80" rx="7"/>
+    <text class="t" x="100" y="334">SampleKernel</text>
+    <line class="sep" x1="84" y1="344" x2="354" y2="344"/>
+    <text class="m" x="100" y="364">check(sample, art)</text>
+    <text class="lbl" x="100" y="382">owns the per-sample failsafe</text>
+
+    <rect class="b-warn" x="84" y="416" width="270" height="72" rx="7"/>
+    <text class="t2" x="100" y="438">MutatingKernel</text>
+    <text class="m" x="100" y="458">run_mutating() → Mutation</text>
+    <text class="lbl" x="100" y="476">DataDumper only</text>
+
+    <path class="edge" d="M54,144 H38"/>
+    <path class="edge" d="M54,248 H38"/>
+    <path class="edge" d="M38,248 V76" marker-end="url(#tri)"/>
+    <path class="edge" d="M84,352 H68"/>
+    <path class="edge" d="M84,452 H68"/>
+    <path class="edge" d="M68,452 V288" marker-end="url(#tri)"/>
+
+    <rect class="b-exec" x="420" y="24" width="250" height="130" rx="7"/>
+    <text class="t" x="436" y="46">Pipeline</text>
+    <line class="sep" x1="420" y1="56" x2="670" y2="56"/>
+    <text class="m" x="436" y="76">name · job_id · source</text>
+    <text class="m" x="436" y="94">nodes: tuple[NodeSpec]</text>
+    <line class="sep" x1="420" y1="106" x2="670" y2="106"/>
+    <text class="m" x="436" y="126">from_yaml() · validated()</text>
+    <text class="m" x="436" y="144">topo_order() · hash()</text>
+
+    <rect class="b-exec" x="420" y="194" width="250" height="94" rx="7"/>
+    <text class="t" x="436" y="216">NodeSpec</text>
+    <line class="sep" x1="420" y1="226" x2="670" y2="226"/>
+    <text class="m" x="436" y="246">name · kernel (dotted path)</text>
+    <text class="m" x="436" y="264">params · inputs</text>
+    <text class="lbl" x="436" y="282">params are strict — no **kwargs</text>
+
+    <rect class="b-exec" x="420" y="328" width="250" height="150" rx="7"/>
+    <text class="t" x="436" y="350">Executor</text>
+    <line class="sep" x1="420" y1="360" x2="670" y2="360"/>
+    <text class="m" x="436" y="380">run() → Report</text>
+    <text class="m" x="436" y="398">artifacts: ArtifactUnion</text>
+    <line class="sep" x1="420" y1="410" x2="670" y2="410"/>
+    <text class="lbl" x="436" y="430">owns union at joins</text>
+    <text class="lbl" x="436" y="448">owns status aggregation</text>
+    <text class="lbl" x="436" y="466">owns the failsafes</text>
+
+    <rect class="b-core" x="800" y="24" width="250" height="148" rx="7"/>
+    <text class="t" x="816" y="46">Report</text>
+    <line class="sep" x1="800" y1="56" x2="1050" y2="56"/>
+    <text class="m" x="816" y="76">schema_version: 1</text>
+    <text class="m" x="816" y="94">job · samples · summary</text>
+    <line class="sep" x1="800" y1="106" x2="1050" y2="106"/>
+    <text class="m" x="816" y="126">apply(node, ext)</text>
+    <text class="m" x="816" y="144">merge(other)</text>
+    <text class="m" x="816" y="162">counts() · to_json()</text>
+
+    <rect class="b-core" x="800" y="210" width="250" height="112" rx="7"/>
+    <text class="t" x="816" y="232">Check</text>
+    <line class="sep" x1="800" y1="242" x2="1050" y2="242"/>
+    <text class="m" x="816" y="262">status: pass|warn|fail|error</text>
+    <text class="m" x="816" y="280">measurement: Any</text>
+    <text class="m" x="816" y="298">threshold · details</text>
+    <text class="lbl" x="816" y="316">kernel judges, YAML thresholds</text>
+
+    <rect class="b-core" x="800" y="360" width="250" height="76" rx="7"/>
+    <text class="t2" x="816" y="382">ReportExt</text>
+    <text class="m" x="816" y="402">checks: {sid → {name → Check}}</text>
+    <text class="m" x="816" y="420">summary: dict</text>
+
+    <rect class="b-core" x="800" y="470" width="250" height="64" rx="7"/>
+    <text class="t2" x="816" y="492">ReportView</text>
+    <text class="m" x="816" y="512">is_alive(sid) · status_of(sid)</text>
+    <text class="lbl" x="816" y="528">read-only, ancestor-scoped</text>
+
+    <path class="edge" d="M545,194 V154" marker-end="url(#dia)"/>
+    <text class="lbl" x="555" y="178">n nodes</text>
+    <path class="edge" d="M545,328 V288" marker-end="url(#arw)"/>
+    <text class="lbl" x="555" y="312">instantiates kernels</text>
+
+    <path class="edge" d="M324,248 H384 V400 H420" marker-end="url(#arw)"/>
+    <text class="lbl" x="392" y="300">returns (ArtifactExt, ReportExt)</text>
+
+    <path class="edge" d="M670,394 H750 V98 H800" marker-end="url(#arw)"/>
+    <text class="lbl" x="756" y="192">aggregates</text>
+    <path class="edge" d="M670,450 H716 V502 H800" marker-end="url(#arw)"/>
+    <text class="lbl" x="676" y="442">hands out</text>
+
+    <path class="edge" d="M925,210 V172" marker-end="url(#dia)"/>
+    <path class="edge" d="M925,322 V360" marker-end="url(#dia)"/>
+  </svg>
+  </figure>
+
+  <!-- ============================ 4 ============================ -->
+  <h2 id="flow"><span class="num">4</span>Execution flow — per-batch streaming + terminal finalize</h2>
+  <p class="sub">
+    One batch at a time through the whole DAG, branches in parallel, then a dumb per-sample merge
+    (keys are disjoint across batches), then the decoded payloads die. Memory is bounded by batch
+    size, not dataset size.
+  </p>
+  <figure>
+  <svg class="diagram" viewBox="0 0 1000 620" role="img" aria-label="Execution flow diagram">
+    <rect class="b-kern" x="40" y="40" width="260" height="80" rx="7"/>
+    <text class="t" x="170" y="66" text-anchor="middle">SourceKernel.iter_batches()</text>
+    <text class="lbl" x="170" y="86" text-anchor="middle">enumerate vendor layout →</text>
+    <text class="lbl" x="170" y="102" text-anchor="middle">Samples of LazyRaws (no bytes read)</text>
+
+    <rect class="b-dash" x="360" y="28" width="600" height="282" rx="9"/>
+    <text class="t2" x="378" y="52">DAG run for batch k</text>
+    <text class="lbl-i" x="524" y="52">thread pool · driver loop in main thread</text>
+
+    <rect class="b-core" x="392" y="72" width="150" height="48" rx="6"/>
+    <text class="t2" x="467" y="94" text-anchor="middle">load/batch</text>
+    <text class="lbl" x="467" y="111" text-anchor="middle">in the union</text>
+
+    <rect class="b-kern" x="640" y="66" width="150" height="46" rx="6"/>
+    <text class="t2" x="715" y="94" text-anchor="middle">duration</text>
+    <rect class="b-kern" x="640" y="140" width="150" height="46" rx="6"/>
+    <text class="t2" x="715" y="168" text-anchor="middle">imu</text>
+
+    <rect class="b-core" x="830" y="88" width="110" height="52" rx="6"/>
+    <text class="t2" x="885" y="110" text-anchor="middle">join</text>
+    <text class="lbl" x="885" y="128" text-anchor="middle">union</text>
+
+    <rect class="b-warn" x="620" y="230" width="320" height="58" rx="6"/>
+    <text class="t2" x="780" y="254" text-anchor="middle">DataDumper</text>
+    <text class="lbl" x="780" y="274" text-anchor="middle">dump heavy artifacts → LazyRaw swap, or free</text>
+
+    <path class="edge" d="M300,80 H360" marker-end="url(#arw)"/>
+    <text class="lbl" x="330" y="72" text-anchor="middle">yield</text>
+
+    <path class="edge" d="M542,88 H640" marker-end="url(#arw)"/>
+    <path class="edge" d="M542,104 H590 V163 H640" marker-end="url(#arw)"/>
+    <path class="edge" d="M790,89 H812 V108 H830" marker-end="url(#arw)"/>
+    <path class="edge" d="M790,163 H812 V120 H830" marker-end="url(#arw)"/>
+    <path class="edge" d="M885,140 V196 H780 V230" marker-end="url(#arw)"/>
+    <text class="lbl-i" x="500" y="206" text-anchor="middle">branches share one decode</text>
+    <text class="lbl-i" x="500" y="222" text-anchor="middle">per sample (LazyRaw memo)</text>
+
+    <rect class="b-exec" x="360" y="346" width="600" height="62" rx="7"/>
+    <text class="t2" x="660" y="372" text-anchor="middle">merge into job union + report</text>
+    <text class="lbl" x="660" y="392" text-anchor="middle">per-sample keys are disjoint across batches → dict union, zero logic</text>
+    <path class="edge" d="M660,310 V346" marker-end="url(#arw)"/>
+
+    <rect class="b-exec" x="360" y="432" width="600" height="48" rx="7"/>
+    <text class="t2" x="660" y="461" text-anchor="middle">batch.release() — decoded payloads freed</text>
+    <path class="edge" d="M660,408 V432" marker-end="url(#arw)"/>
+
+    <path class="edge" d="M360,456 H170 V120" marker-end="url(#arw)"/>
+    <text class="lbl-i" x="178" y="300">next batch</text>
+
+    <rect class="b-exec" x="360" y="516" width="290" height="80" rx="7"/>
+    <text class="t2" x="505" y="540" text-anchor="middle">finalize() — topo order</text>
+    <text class="lbl" x="505" y="560" text-anchor="middle">dataset-level reduces over the</text>
+    <text class="lbl" x="505" y="576" text-anchor="middle">merged union → summary</text>
+
+    <rect class="b-warn" x="670" y="516" width="290" height="80" rx="7"/>
+    <text class="t2" x="815" y="540" text-anchor="middle">finalize_mutating()</text>
+    <text class="lbl" x="815" y="560" text-anchor="middle">job stats stamped first, then</text>
+    <text class="lbl" x="815" y="576" text-anchor="middle">dumpers write the complete report</text>
+
+    <path class="edge" d="M505,480 V516" marker-end="url(#arw)"/>
+    <text class="lbl-i" x="515" y="502">all batches done</text>
+    <path class="edge" d="M650,556 H670" marker-end="url(#arw)"/>
+
+    <rect class="b-dash" x="40" y="516" width="260" height="60" rx="7"/>
+    <text class="t2" x="170" y="540" text-anchor="middle">external splitter</text>
+    <text class="lbl" x="170" y="560" text-anchor="middle">one YAML per machine — not our job</text>
+  </svg>
+  </figure>
+  <p class="note">
+    A node's inputs are the union <em>and report</em> of its <strong>ancestors</strong>, never global
+    "whatever finished first" state. Since kernels skip samples already marked <code>error</code>,
+    a shared report would make the outcome depend on thread scheduling; ancestor-scoped views make
+    the report scheduling-invariant.
+  </p>
+
+  <!-- ============================ 5 ============================ -->
+  <h2 id="access"><span class="num">5</span>Access modes — where the money is spent</h2>
+  <p class="sub">
+    Vendor videos run 70&nbsp;MB–2&nbsp;GB. The decoder picks the access mode, and picking right is
+    the difference between half a megabyte and two gigabytes. Numbers measured on one 177.9&nbsp;MB
+    DJI MP4.
+  </p>
+  <figure>
+  <svg class="diagram" viewBox="0 0 1000 400" role="img" aria-label="Access modes diagram">
+    <rect class="b-core" x="30" y="140" width="200" height="112" rx="7"/>
+    <text class="t" x="130" y="172" text-anchor="middle">LazyRaw</text>
+    <text class="m" x="130" y="194" text-anchor="middle">uri + decoder</text>
+    <text class="lbl" x="130" y="218" text-anchor="middle">nothing fetched</text>
+    <text class="lbl" x="130" y="234" text-anchor="middle">until asked</text>
+
+    <rect class="b-kern" x="360" y="24" width="300" height="100" rx="7"/>
+    <text class="t2" x="378" y="48">open() — remote seek</text>
+    <text class="lbl" x="378" y="68">ranged GETs only; container headers</text>
+    <text class="num-b" x="378" y="92">0.45 MB · 11 reads · 1.0 s</text>
+    <text class="lbl" x="378" y="112">0.25% of the file — video_meta</text>
+
+    <rect class="b-kern" x="360" y="152" width="300" height="100" rx="7"/>
+    <text class="t2" x="378" y="176">local_path() — materialise</text>
+    <text class="lbl" x="378" y="196">one sequential GET, chunked to disk</text>
+    <text class="num-b" x="378" y="220">177.9 MB · 1 stream · never in RAM</text>
+    <text class="lbl" x="378" y="240">dji_imu, video_file</text>
+
+    <rect class="b-warn" x="360" y="280" width="300" height="100" rx="7"/>
+    <text class="t2" x="378" y="304">read_bytes(max_bytes)</text>
+    <text class="lbl" x="378" y="324">whole object in memory — sidecars only</text>
+    <text class="num-b" x="378" y="348">refuses &gt; 64 MiB</text>
+    <text class="lbl" x="378" y="368">json, bytes</text>
+
+    <path class="edge" d="M230,196 H300 V74 H360" marker-end="url(#arw)"/>
+    <path class="edge" d="M300,196 H360" marker-end="url(#arw)"/>
+    <path class="edge" d="M300,196 V330 H360" marker-end="url(#arw)"/>
+
+    <rect class="b-warn" x="710" y="24" width="260" height="100" rx="7"/>
+    <text class="t2" x="728" y="48">why not remote-demux IMU?</text>
+    <text class="num-b" x="728" y="72">177.90 MB · 4406 reads · 6.3 s</text>
+    <text class="lbl" x="728" y="92">telemetry packets are interleaved —</text>
+    <text class="lbl" x="728" y="110">"just the track" is 99.99% of it</text>
+    <path class="edge-d" d="M660,74 H710" marker-end="url(#arw)"/>
+
+    <rect class="b-core" x="710" y="152" width="260" height="100" rx="7"/>
+    <text class="t2" x="728" y="176">tier 1 · disk cache</text>
+    <text class="lbl" x="728" y="196">worker-global, LRU, 32 GB default</text>
+    <text class="lbl" x="728" y="214">keyed by URI → N threads, 1 download</text>
+    <text class="lbl" x="728" y="232">atomic rename ⇒ idempotent retries</text>
+    <path class="edge" d="M660,196 H710" marker-end="url(#arw)"/>
+
+    <rect class="b-core" x="710" y="280" width="260" height="100" rx="7"/>
+    <text class="t2" x="728" y="304">tier 2 · decode memo</text>
+    <text class="lbl" x="728" y="324">on the LazyRaw instance, under a lock</text>
+    <text class="lbl" x="728" y="342">parallel branches decode once</text>
+    <text class="lbl" x="728" y="360">released when the batch's DAG run ends</text>
+    <path class="edge-d" d="M840,252 V280" marker-end="url(#arw)"/>
+
+    <text class="lbl-i" x="130" y="290" text-anchor="middle">decoder chooses;</text>
+    <text class="lbl-i" x="130" y="306" text-anchor="middle">kernel never has to</text>
+  </svg>
+  </figure>
+
+  <!-- ============================ 6 ============================ -->
+  <h2 id="failsafe"><span class="num">6</span>Failsafe layers — the job always completes</h2>
+  <p class="sub">
+    <code>error</code> is a first-class status: unreadable data is itself a quality defect. Nothing
+    propagates out of <code>Executor.run()</code>.
+  </p>
+  <figure>
+  <svg class="diagram" viewBox="0 0 1000 400" role="img" aria-label="Failsafe layers diagram">
+    <rect class="b-warn" x="24" y="26" width="290" height="56" rx="7"/>
+    <text class="t2" x="40" y="48">vendor item unreadable</text>
+    <text class="lbl" x="40" y="68">at enumeration (zero-size, no video)</text>
+
+    <rect class="b-warn" x="24" y="102" width="290" height="56" rx="7"/>
+    <text class="t2" x="40" y="124">source raises mid-iteration</text>
+    <text class="lbl" x="40" y="144">listing blew up half way</text>
+
+    <rect class="b-warn" x="24" y="178" width="290" height="56" rx="7"/>
+    <text class="t2" x="40" y="200">decode / kernel fails on a sample</text>
+    <text class="lbl" x="40" y="220">corrupt file, missing IMU track</text>
+
+    <rect class="b-warn" x="24" y="254" width="290" height="56" rx="7"/>
+    <text class="t2" x="40" y="276">kernel raises before any sample</text>
+    <text class="lbl" x="40" y="296">bad config reached at runtime</text>
+
+    <rect class="b-dash" x="24" y="326" width="290" height="40" rx="7"/>
+    <text class="t2" x="40" y="350">worker dies</text>
+
+    <rect class="b-exec" x="380" y="26" width="340" height="56" rx="7"/>
+    <text class="lbl" x="396" y="50">error sample in the initial report fragment</text>
+    <text class="lbl" x="396" y="68">— no decode is even attempted</text>
+
+    <rect class="b-exec" x="380" y="102" width="340" height="56" rx="7"/>
+    <text class="lbl" x="396" y="126">summary.&lt;source&gt;.source_error recorded;</text>
+    <text class="lbl" x="396" y="144">job completes with the batches it got</text>
+
+    <rect class="b-exec" x="380" y="178" width="340" height="56" rx="7"/>
+    <text class="lbl" x="396" y="202">status: error at that node; sample dropped</text>
+    <text class="lbl" x="396" y="220">downstream; batchmates continue</text>
+
+    <rect class="b-exec" x="380" y="254" width="340" height="56" rx="7"/>
+    <text class="lbl" x="396" y="278">every still-live sample in the batch gets</text>
+    <text class="lbl" x="396" y="296">error at that node</text>
+
+    <rect class="b-exec" x="380" y="326" width="340" height="40" rx="7"/>
+    <text class="lbl" x="396" y="350">re-run the YAML — dump paths are timestamp-free</text>
+
+    <path class="edge" d="M314,54 H380" marker-end="url(#arw)"/>
+    <path class="edge" d="M314,130 H380" marker-end="url(#arw)"/>
+    <path class="edge" d="M314,206 H380" marker-end="url(#arw)"/>
+    <path class="edge" d="M314,282 H380" marker-end="url(#arw)"/>
+    <path class="edge-d" d="M314,346 H380" marker-end="url(#arw)"/>
+
+    <rect class="b-core" x="790" y="112" width="180" height="130" rx="7"/>
+    <text class="t" x="880" y="142" text-anchor="middle">Report</text>
+    <text class="lbl" x="880" y="166" text-anchor="middle">sample status =</text>
+    <text class="lbl" x="880" y="182" text-anchor="middle">worst of its checks</text>
+    <text class="m" x="880" y="204" text-anchor="middle">error &gt; fail</text>
+    <text class="m" x="880" y="220" text-anchor="middle">&gt; warn &gt; pass</text>
+
+    <!-- fan-in: lane order chosen so no lane crosses another row's run-in -->
+    <path class="edge" d="M720,54 H778 V138 H790" marker-end="url(#arw)"/>
+    <path class="edge" d="M720,130 H766 V158 H790" marker-end="url(#arw)"/>
+    <path class="edge" d="M720,206 H730 V178 H790" marker-end="url(#arw)"/>
+    <path class="edge" d="M720,282 H742 V198 H790" marker-end="url(#arw)"/>
+    <path class="edge-d" d="M720,346 H754 V218 H790" marker-end="url(#arw)"/>
+  </svg>
+  </figure>
+
+  <footer>
+    Sources: <code>doc/design.md</code> (contract + decision log) ·
+    <code>doc/uml/README.md</code> (mermaid) ·
+    <code>doc/components/</code> (per-component detail) ·
+    <code>doc/progress.md</code> (status, tests, limitations).
+    Assets are local (<code>assets/uml.css</code>, <code>assets/uml.js</code>) — no CDN, no build step.
+  </footer>
+</main>
+<script src="assets/uml.js"></script>
+</body>
+</html>

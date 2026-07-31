@@ -23,8 +23,6 @@ Verdicts come from YAML: ``z_thresh`` sets what "outlier" means, ``max_spikes`` 
 
 from __future__ import annotations
 
-from typing import Any
-
 import numpy as np
 
 from ..data import ArtifactUnion, Sample
@@ -117,9 +115,8 @@ class ImuSpikeKernel(SampleKernel):
         )
 
     def finalize(self, art: ArtifactUnion, report: ReportView) -> tuple[ArtifactExt, ReportExt]:
-        mine = art.under(self.node_name)
-        spikes = {k[len("n_spikes/") :]: v for k, v in mine.items() if k.startswith("n_spikes/")}
-        zs = {k[len("max_z/") :]: v for k, v in mine.items() if k.startswith("max_z/")}
+        spikes = art.per_sample(self.node_name, "n_spikes")
+        zs = art.per_sample(self.node_name, "max_z")
         if not spikes:
             return {}, ReportExt(summary={"n_tracks": 0})
         summary = {

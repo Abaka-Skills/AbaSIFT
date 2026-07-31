@@ -155,11 +155,7 @@ class ReportView:
         return self._r.status_of(sample_id)
 
     def is_alive(self, sample_id: str) -> bool:
-        return self._r.status_of(sample_id) != ERROR
-
-    def checks_of(self, sample_id: str) -> Mapping[str, Check]:
-        entry = self._r.samples.get(sample_id)
-        return dict(entry["checks"]) if entry else {}
+        return self.status_of(sample_id) != ERROR
 
     def counts(self) -> dict[str, int]:
         return self._r.counts()

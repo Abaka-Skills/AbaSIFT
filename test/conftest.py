@@ -70,4 +70,4 @@ def s3_env(s3_conf, monkeypatch) -> dict:
     monkeypatch.setenv("AWS_ACCESS_KEY_ID", s3_conf["access_key"])
     monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", s3_conf["secret_key"])
     monkeypatch.setenv("AWS_DEFAULT_REGION", s3_conf["region"])
-    return {"root": f"s3://{s3_conf['bucket']}/{s3_conf['path']}"}
+    return {"root": f"s3://{s3_conf['bucket']}/{s3_conf['path']}".rstrip("/")}

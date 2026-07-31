@@ -35,7 +35,7 @@ pass`). A job always completes and always reports: a corrupt file is a finding, 
 ## Docs
 
 - [doc/design.md](doc/design.md) — contract spec + decision log (read this first)
-- [doc/uml.md](doc/uml.md) — class / execution / sequence diagrams
+- [doc/uml/index.html](doc/uml/index.html) — rendered architecture diagrams (self-contained, open in a browser); [mermaid source](doc/uml/README.md)
 - [doc/progress.md](doc/progress.md) — component status, test map, known limitations
 - [doc/components/](doc/components/) — per-component detail:
   [lazyraw + cache](doc/components/lazyraw-cache.md) ·

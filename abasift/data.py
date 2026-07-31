@@ -121,16 +121,30 @@ class ArtifactUnion:
         p = node + "/"
         return {k[len(p):]: v for k, v in self._data.items() if k.startswith(p)}
 
-    def batch(self) -> Batch:
-        """The ``Batch`` travelling in this union (node 0's artifact)."""
+    def per_sample(self, node: str, name: str) -> dict[str, Any]:
+        """A node's per-sample artifacts (``"{name}/{sample_id}"``), keyed by sample id.
+
+        The mirror of the convention :meth:`SampleKernel.check` writes, so a ``finalize()``
+        reduce reads its own artifacts back without re-deriving the prefix surgery.
+        """
+        prefix = f"{name}/"
+        return {k[len(prefix):]: v for k, v in self.under(node).items() if k.startswith(prefix)}
+
+    def find_batch(self) -> Batch | None:
+        """The ``Batch`` travelling in this union, or ``None`` if there is none."""
         found = [(k, v) for k, v in self._data.items() if isinstance(v, Batch)]
-        if not found:
+        if len(found) > 1:
+            raise ExecutorError(f"ambiguous batch: {sorted(k for k, _ in found)}")
+        return found[0][1] if found else None
+
+    def batch(self) -> Batch:
+        """The ``Batch`` travelling in this union (node 0's artifact). Raises if absent."""
+        batch = self.find_batch()
+        if batch is None:
             raise ExecutorError(
                 "no Batch in the artifact union — is this node downstream of the source node?"
             )
-        if len(found) > 1:
-            raise ExecutorError(f"ambiguous batch: {sorted(k for k, _ in found)}")
-        return found[0][1]
+        return batch
 
     # -- write (each returns a new union) --------------------------------
 
@@ -189,7 +203,7 @@ class ArtifactUnion:
         )
 
     def to_json(self) -> dict:
-        return {k: _jsonable(v) for k, v in self._data.items()}
+        return {k: jsonable(v) for k, v in self._data.items()}
 
 
 def _same(a: Any, b: Any) -> bool:
@@ -201,7 +215,8 @@ def _same(a: Any, b: Any) -> bool:
         return False
 
 
-def _jsonable(v: Any) -> Any:
+def jsonable(v: Any) -> Any:
+    """Best-effort JSON projection of an artifact value. Used by the union and the dumper."""
     if isinstance(v, LazyRaw):
         return v.to_json()
     if isinstance(v, Batch):
@@ -209,9 +224,9 @@ def _jsonable(v: Any) -> Any:
     if isinstance(v, (str, int, float, bool)) or v is None:
         return v
     if isinstance(v, Mapping):
-        return {str(k): _jsonable(x) for k, x in v.items()}
+        return {str(k): jsonable(x) for k, x in v.items()}
     if isinstance(v, (list, tuple)):
-        return [_jsonable(x) for x in v]
+        return [jsonable(x) for x in v]
     to_json = getattr(v, "to_json", None)
     if callable(to_json):
         return to_json()

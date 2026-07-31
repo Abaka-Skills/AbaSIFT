@@ -60,6 +60,9 @@ class Executor:
                 "job_id": p.job_id,
                 "worker": f"{socket.gethostname()}:{os.getpid()}",
                 "started_at": _utc(started),
+                # One clock read per job: every dumper agrees on the date even across
+                # midnight, and the report records where its artifacts went.
+                "date": datetime.fromtimestamp(started, tz=timezone.utc).strftime("%m%d%Y"),
                 "python": platform.python_version(),
             }
         )

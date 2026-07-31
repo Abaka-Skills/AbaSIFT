@@ -21,16 +21,31 @@ which deletes the backing file only if it lives inside the cache root. The dumpe
 derive that path itself: the key scheme and the "never delete outside the cache" guarantee
 stay in `cache.py`, where they belong. For intermediates nobody downstream reads.
 
-## Paths are deterministic
+## Paths
 
 ```
-{target}/{job_id}/{node}/{key with '/' -> '__'}
-{target}/{job_id}/{node}/report.json      # the __report__ pseudo-key
+{target_root}/{job_id}/{node}/{key with '/' -> '__'}
+{target_root}/{job_id}/{node}/report.json      # the __report__ pseudo-key
 ```
 
-`f(job_id, node, key)`, no timestamps — a re-run of the same YAML overwrites the same
-objects, so a retried job after a worker death is idempotent
-(`test_rerunning_the_same_yaml_overwrites_the_same_paths`).
+`target_root` depends on how `target` was given, and the difference is deliberate:
+
+| `target` in YAML | `target_root` | why |
+|---|---|---|
+| omitted | `dump/<mmddyyyy>` | Interactive runs get a tidy dated tree under the working directory. **Relative, never absolute**, so a YAML is portable between machines. |
+| set (`/data/out`, `s3://…`) | used verbatim, **undated** | `f(job_id, node, key)` with no timestamps, so a retried job overwrites rather than duplicates (`test_rerunning_the_same_yaml_overwrites_the_same_paths`). |
+| `""` (explicit) | — | *free* mode. |
+
+So the no-timestamps rule still holds wherever it matters: anything an external splitter
+generates sets `target` explicitly. A default run pays for the date only if it is retried
+across midnight — and the date it used is recorded in the report as `job.date`, so the
+exact tree can be reproduced by passing `target: dump/<that date>`.
+
+The date is read from the job's start time **once per job**, so every dumper in a DAG
+agrees even if the run straddles midnight.
+
+Free mode is **opt-in**: `target` must be explicitly `""`. Omitting it gives you the
+dated dump, never a silent delete — the destructive mode is the one you have to ask for.
 
 ## `__report__` is dumped after finalize
 

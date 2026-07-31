@@ -28,5 +28,7 @@ pipeline:
       kernel: abasift.kernels.DataDumper
       params:
         keys: ["__report__"]
-        target: /tmp/abasift-out
+        # No `target:` — defaults to ./dump/<mmddyyyy>/<job_id>/<node>/. Set one
+        # explicitly (and it is used verbatim, undated) when a job must be retried
+        # to exactly the same paths.
       inputs: [duration]

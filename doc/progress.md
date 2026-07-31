@@ -3,7 +3,7 @@
 Status of every component, with a pointer to its own doc. Update this file when a
 component's state changes.
 
-Verification: `pytest` (71 tests: 67 offline + 4 against the real bucket) and
+Verification: `pytest` (73 tests: 69 offline + 4 against the real bucket) and
 `python -m pyflakes abasift test` (clean — no unused or shadowed imports).
 
 ## Repo layout
@@ -41,7 +41,7 @@ adding a vendor touches `loaders/` + `vendor/` and nothing else.
 | 11 | DJI telemetry reader | `vendor/dji_telemetry.py` | [dji-telemetry.md](components/dji-telemetry.md) | done |
 | 12 | Demo 1 — duration probe | `kernels/duration.py` | [kernels.md](components/kernels.md) | done, runs on S3 |
 | 13 | Demo 2 — IMU spike | `kernels/imu_spike.py` | [kernels.md](components/kernels.md) | done, runs on S3 |
-| 14 | Tests | `test/` | this file, below | 71 passing |
+| 14 | Tests | `test/` | this file, below | 73 passing |
 
 ## 1. Environment
 

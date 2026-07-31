@@ -32,7 +32,8 @@ Python package is `abasift/` at the repo root; CLI entry point is `abasift`.
 - Failures are per-sample findings, never job crashes: decode/kernel errors →
   `status: error`, sample dropped downstream, batchmates continue.
 - Dump paths are deterministic (`f(job_id, node, key)`, no timestamps) so retries
-  are idempotent.
+  are idempotent — whenever `target` is set. Omit `target` and you get the relative
+  dated default `dump/<mmddyyyy>/`; never hardcode an absolute path in a YAML.
 - All I/O via fsspec; AWS credentials from the standard chain only — **never in
   YAML, never committed**. `test/s3.json` holds real keys: keep it gitignored.
 - Parallelism is threads only. Python ≥ 3.11.

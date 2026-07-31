@@ -36,6 +36,10 @@ from ..report import ReportView
 #: Pseudo-key: the finished job report. Dumped in the finalize pass, never per batch.
 REPORT_KEY = "__report__"
 
+#: Where dumps land when a pipeline doesn't say. Relative to the working directory —
+#: never an absolute path, so a YAML is portable between machines.
+DEFAULT_TARGET_ROOT = "dump"
+
 _COPY_CHUNK = 8 * 2**20
 
 
@@ -43,12 +47,33 @@ class DataDumper(MutatingKernel):
     """Params:
 
     ``keys``    globs over union keys, plus the pseudo-key ``__report__``
-    ``target``  destination prefix (local or ``s3://``); empty means *free*
+    ``target``  destination prefix (local or ``s3://``). Omit it for the dated default
+                ``dump/<mmddyyyy>/``; set it to ``""`` for *free* mode.
     """
 
-    def __init__(self, keys: list[str] | tuple[str, ...] = (REPORT_KEY,), target: str = ""):
+    def __init__(self, keys: list[str] | tuple[str, ...] = (REPORT_KEY,), target: str | None = None):
         self.keys = tuple(keys)
-        self.target = (target or "").rstrip("/")
+        #: ``None`` = use the dated default; ``""`` = free mode; anything else = verbatim.
+        self.target = None if target is None else target.rstrip("/")
+
+    @property
+    def target_root(self) -> str:
+        """An explicit ``target`` is used verbatim; the default is ``dump/<mmddyyyy>``.
+
+        The date lives in the *default* only, deliberately. Dump paths must be
+        deterministic so a retried job overwrites rather than duplicates, and a date is a
+        timestamp — so a pipeline that cares (anything an external splitter generates)
+        sets ``target`` explicitly and keeps `f(job_id, node, key)`. Interactive runs get
+        a tidy dated tree instead, and pay for it only if they are retried across midnight.
+        """
+        if self.target is not None:
+            return self.target
+        return f"{DEFAULT_TARGET_ROOT}/{self.job.get('date') or 'undated'}"
+
+    @property
+    def freeing(self) -> bool:
+        """Free mode is opt-in: destructive behaviour never happens by default."""
+        return self.target == ""
 
     # -- per batch: artifacts -------------------------------------------
 
@@ -56,7 +81,7 @@ class DataDumper(MutatingKernel):
         matched = self._match(art)
         if not matched:
             return Mutation()
-        if not self.target:
+        if self.freeing:
             for key in matched:
                 value = art[key]
                 if isinstance(value, LazyRaw):
@@ -68,7 +93,7 @@ class DataDumper(MutatingKernel):
     # -- after finalize: the report -------------------------------------
 
     def finalize_mutating(self, art: ArtifactUnion, report: ReportView) -> Mutation | None:
-        if REPORT_KEY not in self.keys or not self.target:
+        if REPORT_KEY not in self.keys or self.freeing:
             return None
         uri = self._write_json(self.path_for("report.json"), report.to_json())
         return Mutation(ext={"report_uri": uri})
@@ -76,9 +101,9 @@ class DataDumper(MutatingKernel):
     # -- paths ----------------------------------------------------------
 
     def path_for(self, name: str) -> str:
-        """``{target}/{job_id}/{node}/{name}`` — deterministic, no timestamps."""
-        job_id = self.job.get("job_id", "job")
-        return f"{self.target}/{job_id}/{self.node_name}/{name}"
+        """``{target_root}/{job_id}/{node}/{name}`` — relative unless ``target`` is absolute."""
+        parts = (self.target_root, self.job.get("job_id", "job"), self.node_name, name)
+        return "/".join(p for p in parts if p)
 
     # -- internals ------------------------------------------------------
 

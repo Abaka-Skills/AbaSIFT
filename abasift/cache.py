@@ -45,11 +45,11 @@ class DiskCache:
     @staticmethod
     def key_for(uri: str) -> str:
         """Deterministic filename for a URI; suffix kept so ffmpeg can sniff the format."""
-        digest = hashlib.sha256(uri.encode()).hexdigest()[:32]
+        stem = hashlib.sha256(uri.encode()).hexdigest()[:32]
         suffix = PurePosixPath(uri.split("?", 1)[0]).suffix
         if len(suffix) > 8 or not suffix.isascii():
             suffix = ""
-        return digest + suffix
+        return stem + suffix
 
     def _lock_for(self, key: str) -> threading.Lock:
         with self._guard:
@@ -114,9 +114,12 @@ class DiskCache:
 
         Freeing an artifact goes through here rather than deriving the path at the call
         site, so the key scheme and the "never delete outside the cache root" guarantee
-        stay in one place.
+        stay in one place. Two kinds of URI arrive: one that was *materialized* here (keyed
+        by hash), and one that already names an entry — a kernel that writes its own entry
+        (``VideoFrameKernel``) hands back the ``file://`` path of the entry itself.
         """
-        path = self.root / self.key_for(uri)
+        local = _as_local_path(uri)
+        path = local if local is not None else self.root / self.key_for(uri)
         try:
             if path.parent.resolve() != self.root.resolve():
                 return False
@@ -124,6 +127,18 @@ class DiskCache:
             return True
         except OSError:
             return False
+
+
+def _as_local_path(uri: str) -> Path | None:
+    """The path a ``file://`` URI names, or ``None`` for anything remote.
+
+    Plain slicing, deliberately: fsspec does not percent-decode either, so a URI built by
+    encoding (``Path.as_uri()``) would be a path fsspec cannot open. One spelling on both
+    sides — see :func:`abasift.kernels.frames.file_uri`.
+    """
+    if uri.startswith("file://"):
+        return Path(uri[len("file://") :])
+    return None
 
 
 def _touch(path: Path) -> None:
@@ -149,7 +164,25 @@ def disk_cache() -> DiskCache:
 
 
 def set_disk_cache(cache: DiskCache | None) -> None:
-    """Override the global cache (tests)."""
+    """Override the global cache (tests, and :func:`configure_cache`)."""
     global _default
     with _default_guard:
         _default = cache
+
+
+def configure_cache(dir: str | None = None, size_gb: float | None = None) -> DiskCache:
+    """Install the worker cache a job asked for, and return it.
+
+    Precedence is **YAML > environment > built-in default**: an explicit setting in the
+    pipeline wins because it is the more specific statement of intent, and whatever it
+    leaves out falls through to ``ABASIFT_CACHE_DIR`` / ``ABASIFT_CACHE_GB`` and then to
+    ``$TMPDIR/abasift-cache`` at 32 GiB — which is exactly what ``DiskCache()`` already
+    resolves for a ``None``.
+
+    A pipeline that says nothing about the cache must not call this at all: replacing the
+    global would trample a cache someone else (an embedding process, a test fixture)
+    deliberately installed.
+    """
+    cache = DiskCache(root=dir, capacity_bytes=None if size_gb is None else int(size_gb * 2**30))
+    set_disk_cache(cache)
+    return cache

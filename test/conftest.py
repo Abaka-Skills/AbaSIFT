@@ -13,8 +13,29 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 S3_JSON = ROOT / "test" / "s3.json"
 
-#: Known durations for the acceptance test.
+#: What the synthesized clips are. Every test that does arithmetic on a clip reads these
+#: rather than restating the ffmpeg arguments below.
 CLIP_SECONDS = (2, 5, 10)
+CLIP_FPS = 10
+CLIP_SIZE = (160, 120)  # width, height
+
+
+def load_node(videos, **params) -> dict:
+    """The `FlatDirLoader` node every offline pipeline starts with."""
+    return {
+        "name": "load",
+        "kernel": "abasift.loaders.FlatDirLoader",
+        "params": {"root": str(videos), "batch_size": 2, **params},
+        "inputs": [],
+    }
+
+
+def run_nodes(nodes, job_id: str = "test"):
+    """Run a node list and hand back what a test asserts on: the report and the artifacts."""
+    from abasift import Executor, Pipeline
+
+    ex = Executor(Pipeline.from_dict({"job_id": job_id, "nodes": nodes}))
+    return ex.run(), ex.artifacts
 
 
 @pytest.fixture(scope="session")
@@ -33,7 +54,8 @@ def videos(tmp_path_factory, ffmpeg) -> Path:
         subprocess.run(
             [
                 ffmpeg, "-v", "error", "-y",
-                "-f", "lavfi", "-i", f"testsrc=size=160x120:rate=10:duration={secs}",
+                "-f", "lavfi",
+                "-i", f"testsrc=size={CLIP_SIZE[0]}x{CLIP_SIZE[1]}:rate={CLIP_FPS}:duration={secs}",
                 "-c:v", "libx264", "-pix_fmt", "yuv420p",
                 str(d / f"clip_{secs}s.mp4"),
             ],

@@ -24,10 +24,10 @@ from ..pipeline import NodeSpec, Pipeline, import_kernel
 #: This is the one table in the package that a new *interface* would have to touch. A new
 #: kernel, loader or vendor needs no change here at all.
 ROLES: tuple[tuple[type, str, tuple[str, ...]], ...] = (
-    (SourceKernel, "source", ("iter_batches", "finalize")),
-    (MutatingKernel, "mutating", ("run_mutating", "finalize_mutating")),
-    (SampleKernel, "sample", ("sift", "run", "finalize")),
-    (Kernel, "kernel", ("run", "finalize")),
+    (SourceKernel, "source", ("iter_batches", "digest")),
+    (MutatingKernel, "mutating", ("run_mutating", "commit")),
+    (SampleKernel, "sample", ("sift", "run", "digest")),
+    (Kernel, "kernel", ("run", "digest")),
 )
 
 _MAX_VALUE_CHARS = 72
@@ -42,7 +42,6 @@ def describe(pipeline: Pipeline, yaml_path: str | None = None) -> dict:
     ]
     return {
         "pipeline": {
-            "name": pipeline.name,
             "job_id": pipeline.job_id,
             "hash": pipeline.hash(),
             "source": pipeline.source,

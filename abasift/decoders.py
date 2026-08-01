@@ -8,6 +8,7 @@ decoder            access mode     cost on a 178 MB DJI MP4
 =================  ==============  ==========================================
 ``video_meta``     ``open()``      0.45 MB, 11 ranged reads, ~1 s
 ``video_file``     ``local_path()``  one sequential GET into the disk cache
+``video_frames``   ``local_path()``  memory-mapped raw stack — no heap copy at all
 ``dji_imu``        ``local_path()``  same; remote demux would read 100% anyway
 ``json``           ``read_bytes()``  sidecars, capped at 16 MiB
 ``bytes``          ``read_bytes()``  capped; not for video
@@ -20,7 +21,7 @@ import json as _json
 
 from .errors import DecodeError
 from .lazy import LazyRaw, register_decoder
-from .payloads import VideoMeta
+from .payloads import VideoFrames, VideoMeta
 from .vendor.dji_telemetry import IMU_HANDLER, read_dji_imu
 
 
@@ -93,6 +94,55 @@ def decode_video_meta(raw: LazyRaw) -> VideoMeta:
         raise DecodeError(f"cannot read metadata of {raw.uri}: {e}") from e
     finally:
         handle.close()
+
+
+#: The frame-stack contract, in one place: the decoder's registered name, the pixel depth,
+#: and the two functions that write and read a handle's shape. The producer
+#: (``VideoFrameKernel``), the consumer here and any reduce over the handles would otherwise
+#: each spell out ``(n, height, width, 3)`` and ``n*w*h*3`` for themselves.
+VIDEO_FRAMES = "video_frames"
+CHANNELS = 3
+
+
+def frames_handle(uri: str, *, n: int, width: int, height: int, fps: float, source: str = "") -> LazyRaw:
+    """A handle on a raw rgb24 stack. The file has no header, so the shape rides here."""
+    return LazyRaw(
+        uri, VIDEO_FRAMES, n=int(n), width=int(width), height=int(height),
+        fps=round(float(fps), 6), source=source,
+    )
+
+
+def frames_shape(opts) -> tuple[int, int, int, int]:
+    try:
+        return int(opts["n"]), int(opts["height"]), int(opts["width"]), CHANNELS
+    except (KeyError, TypeError, ValueError) as e:
+        raise DecodeError(f"{VIDEO_FRAMES} handle is missing its shape: {e}") from e
+
+
+def frames_nbytes(opts) -> int:
+    """What the stack occupies on disk — derived from the shape, never re-multiplied."""
+    n, height, width, channels = frames_shape(opts)
+    return n * height * width * channels
+
+
+@register_decoder(VIDEO_FRAMES)
+def decode_video_frames(raw: LazyRaw) -> VideoFrames:
+    """Memory-map a raw rgb24 stack written by ``VideoFrameKernel``.
+
+    The file has no header — its shape rides in the handle's ``opts`` — so this costs one
+    ``mmap`` and no copy, whatever the stack's size. A stack written out to ``s3://`` and read
+    back lands in the disk cache first, exactly like any other payload.
+    """
+    import numpy as np
+
+    shape = frames_shape(raw.opts)
+    try:
+        data = np.memmap(raw.local_path(), dtype=np.uint8, mode="r", shape=shape)
+    except Exception as e:
+        raise DecodeError(f"cannot map {raw.uri} as {shape} rgb24: {e}") from e
+    return VideoFrames(
+        data=data, fps=float(raw.opts["fps"]), source=str(raw.opts.get("source") or raw.uri)
+    )
 
 
 @register_decoder("dji_imu")

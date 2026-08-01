@@ -7,7 +7,6 @@
 # Credentials come from the standard AWS chain (env / ~/.aws/credentials) — never here.
 #   abasift run pipelines/duration_egoverse_flat.yaml -o /tmp/duration_report.json
 pipeline:
-  name: egoverse_duration_probe
   job_id: egoverse_flat_duration
   nodes:
     - name: load
@@ -24,11 +23,11 @@ pipeline:
         max_s: 1800.0       # 30 min: longer means the vendor never split the recording
       inputs: [load]
 
-    - name: dump_report
-      kernel: abasift.kernels.DataDumper
+    - name: archive_report
+      kernel: abasift.kernels.DataArchiver
       params:
-        keys: ["__report__"]
-        # No `target:` — defaults to ./dump/<unix ts>/<job_id>/<node>/. Set one
-        # explicitly (and it is used verbatim, undated) when a job must be retried
-        # to exactly the same paths.
+        keys: ["__report__", "__pipeline__"]   # per-sample verdicts, plus the job and its config
+        # No `target:` — defaults to ./dump/<job_id>_<hash>/<unix ts>/<node>/, with the
+        # config copied to ./dump/<job_id>_<hash>/pipeline.yaml. Set one explicitly (used
+        # verbatim, no timestamp) when a job must be retried to exactly the same paths.
       inputs: [duration]

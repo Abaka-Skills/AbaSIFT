@@ -30,8 +30,8 @@
   <p class="lede">
     Distributed QC framework for egocentric vendor datasets. A <strong>job</strong> is one pipeline
     YAML run on one machine; work distribution is external. These are the six views that matter
-    for review. Text sources for the same architecture live in
-    <code>doc/uml/README.md</code>; the contract and decision log are in <code>doc/design.md</code>.
+    for review — this page is the only copy of them. The contract and its reasoning are in
+    <code>doc/design.md</code>.
   </p>
 
   <nav class="nav">
@@ -60,9 +60,9 @@
   </p>
   <figure>
   <svg class="diagram" viewBox="0 0 960 480" role="img" aria-label="Module layer diagram">
-    <rect class="b-exec" x="370" y="16" width="220" height="52" rx="7"/>
-    <text class="t" x="480" y="39" text-anchor="middle">cli.py</text>
-    <text class="lbl" x="480" y="56" text-anchor="middle">abasift run | validate | vis</text>
+    <rect class="b-exec" x="340" y="16" width="280" height="52" rx="7"/>
+    <text class="t" x="480" y="39" text-anchor="middle">cli/</text>
+    <text class="lbl" x="480" y="56" text-anchor="middle">main · banner · term — run | validate | vis</text>
 
     <rect class="b-dash" x="20" y="16" width="200" height="52" rx="7"/>
     <text class="t" x="120" y="39" text-anchor="middle">vis/</text>
@@ -76,10 +76,10 @@
     <text class="t" x="625" y="139" text-anchor="middle">executor.py</text>
     <text class="lbl" x="625" y="156" text-anchor="middle">per-batch streaming, threads</text>
 
-    <rect class="b-kern" x="110" y="216" width="290" height="66" rx="7"/>
-    <text class="t" x="255" y="239" text-anchor="middle">kernels/</text>
-    <text class="m" x="255" y="258" text-anchor="middle">duration · imu_spike · dumper</text>
-    <text class="lbl" x="255" y="274" text-anchor="middle">what to check, and how strictly</text>
+    <rect class="b-kern" x="110" y="216" width="360" height="66" rx="7"/>
+    <text class="t" x="290" y="239" text-anchor="middle">kernels/</text>
+    <text class="m" x="290" y="258" text-anchor="middle">duration · imu_spike · frames · video · archiver</text>
+    <text class="lbl" x="290" y="274" text-anchor="middle">what to check, and how strictly</text>
 
     <rect class="b-kern" x="560" y="216" width="290" height="66" rx="7"/>
     <text class="t" x="705" y="239" text-anchor="middle">loaders/</text>
@@ -98,9 +98,9 @@
     <path class="edge" d="M430,68 V92 H335 V116" marker-end="url(#arw)"/>
     <path class="edge" d="M530,68 V92 H625 V116" marker-end="url(#arw)"/>
     <path class="edge" d="M440,142 H520" marker-end="url(#arw)"/>
-    <path class="edge" d="M300,168 V192 H255 V216" marker-end="url(#arw)"/>
+    <path class="edge" d="M300,168 V192 H290 V216" marker-end="url(#arw)"/>
     <path class="edge" d="M660,168 V192 H705 V216" marker-end="url(#arw)"/>
-    <path class="edge" d="M255,282 V320" marker-end="url(#arw)"/>
+    <path class="edge" d="M290,282 V320" marker-end="url(#arw)"/>
     <path class="edge" d="M705,282 V320" marker-end="url(#arw)"/>
     <path class="edge" d="M730,142 H880 V358 H850" marker-end="url(#arw)"/>
     <path class="edge" d="M230,142 H80 V358 H110" marker-end="url(#arw)"/>
@@ -267,7 +267,7 @@
     <text class="t" x="70" y="230">Kernel</text>
     <line class="sep" x1="54" y1="240" x2="324" y2="240"/>
     <text class="m" x="70" y="260">run(art, report)</text>
-    <text class="m" x="70" y="278">finalize(art, report)</text>
+    <text class="m" x="70" y="278">digest(art, report)</text>
 
     <rect class="b-kern" x="84" y="312" width="270" height="80" rx="7"/>
     <text class="t" x="100" y="334">SampleKernel</text>
@@ -278,7 +278,7 @@
     <rect class="b-warn" x="84" y="416" width="270" height="72" rx="7"/>
     <text class="t2" x="100" y="438">MutatingKernel</text>
     <text class="m" x="100" y="458">run_mutating() → Mutation</text>
-    <text class="lbl" x="100" y="476">DataDumper only</text>
+    <text class="lbl" x="100" y="476">DataArchiver only</text>
 
     <path class="edge" d="M54,144 H38"/>
     <path class="edge" d="M54,248 H38"/>
@@ -360,7 +360,7 @@
   </figure>
 
   <!-- ============================ 4 ============================ -->
-  <h2 id="flow"><span class="num">4</span>Execution flow — per-batch streaming + terminal finalize</h2>
+  <h2 id="flow"><span class="num">4</span>Execution flow — per-batch streaming + terminal digest</h2>
   <p class="sub">
     One batch at a time through the whole DAG, branches in parallel, then a dumb per-sample merge
     (keys are disjoint across batches), then the decoded payloads die. Memory is bounded by batch
@@ -391,7 +391,7 @@
     <text class="lbl" x="885" y="128" text-anchor="middle">union</text>
 
     <rect class="b-warn" x="620" y="230" width="320" height="58" rx="6"/>
-    <text class="t2" x="780" y="254" text-anchor="middle">DataDumper</text>
+    <text class="t2" x="780" y="254" text-anchor="middle">DataArchiver</text>
     <text class="lbl" x="780" y="274" text-anchor="middle">dump heavy artifacts → LazyRaw swap, or free</text>
 
     <path class="edge" d="M300,80 H360" marker-end="url(#arw)"/>
@@ -418,14 +418,14 @@
     <text class="lbl-i" x="178" y="300">next batch</text>
 
     <rect class="b-exec" x="360" y="516" width="290" height="80" rx="7"/>
-    <text class="t2" x="505" y="540" text-anchor="middle">finalize() — topo order</text>
+    <text class="t2" x="505" y="540" text-anchor="middle">digest() — topo order</text>
     <text class="lbl" x="505" y="560" text-anchor="middle">dataset-level reduces over the</text>
     <text class="lbl" x="505" y="576" text-anchor="middle">merged union → summary</text>
 
     <rect class="b-warn" x="670" y="516" width="290" height="80" rx="7"/>
-    <text class="t2" x="815" y="540" text-anchor="middle">finalize_mutating()</text>
+    <text class="t2" x="815" y="540" text-anchor="middle">commit()</text>
     <text class="lbl" x="815" y="560" text-anchor="middle">job stats stamped first, then</text>
-    <text class="lbl" x="815" y="576" text-anchor="middle">dumpers write the complete report</text>
+    <text class="lbl" x="815" y="576" text-anchor="middle">archivers write the complete report</text>
 
     <path class="edge" d="M505,480 V516" marker-end="url(#arw)"/>
     <text class="lbl-i" x="515" y="502">all batches done</text>
@@ -575,10 +575,9 @@
   </figure>
 
   <footer>
-    Sources: <code>doc/design.md</code> (contract + decision log) ·
-    <code>doc/uml/README.md</code> (mermaid) ·
+    Sources: <code>doc/design.md</code> (the contract spec) ·
     <code>doc/components/</code> (per-component detail) ·
-    <code>doc/progress.md</code> (status, tests, limitations).
+    <code>doc/test.md</code> (the test map).
     Assets are local (<code>assets/uml.css</code>, <code>assets/uml.js</code>) — no CDN, no build step.
   </footer>
 </main>

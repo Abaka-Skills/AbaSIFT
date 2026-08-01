@@ -7,7 +7,7 @@ is a DAG of kernels described in one YAML, and one YAML is one job on one machin
 
 ```bash
 bash setup.sh && conda activate abasift    # conda env `abasift`, package installed editable
-pytest -m 'not s3'                         # 91 offline tests; plain `pytest` adds 4 bucket tests
+pytest -m 'not s3'                         # 170 offline tests; plain `pytest` adds 4 bucket tests
 ```
 
 Run the duration demo, then look at what ran:
@@ -19,8 +19,11 @@ abasift vis      pipelines/duration_egoverse_flat.yaml            # host the DAG
 abasift run      pipelines/duration_egoverse_flat.yaml --vis      # ...and watch it run
 ```
 
-`run` prints the per-node summaries and writes the JSON report; exit code 0 means *the job
-completed and reported*, since QC verdicts are findings, not process failures.
+`run` opens with a banner — the scratch cache it resolved, the thread count, and a framed
+DAG with its edges drawn — then writes the JSON report and prints, per node, how each of
+its checks went and whatever it reduced. Exit code 0 means
+*the job completed and reported*, since QC verdicts are findings, not process failures;
+exit 2 means the YAML itself is broken.
 
 `vis` hosts the pipeline at `http://127.0.0.1:8765` — the DAG with each kernel's params and
 signatures, read live off the code, so leave it open while you edit. `run --vis` hosts the
@@ -31,8 +34,8 @@ writes a file.
 
 ```yaml
 pipeline:
-  name: egoverse_duration_probe
   job_id: egoverse_flat_duration
+  cache: {dir: /scratch/abasift, size_gb: 200}    # optional; else $TMPDIR, 32 GiB
   nodes:
     - name: load                                  # node 0 is always the vendor loader
       kernel: abasift.loaders.FlatDirLoader
@@ -48,9 +51,9 @@ pipeline:
         max_s: 1800.0
       inputs: [load]
 
-    - name: dump_report
-      kernel: abasift.kernels.DataDumper
-      params: {keys: ["__report__"]}              # -> ./dump/<unix ts>/<job_id>/<node>/
+    - name: archive_report
+      kernel: abasift.kernels.DataArchiver
+      params: {keys: ["__report__", "__pipeline__"]}   # -> ./dump/<job_id>_<hash>/<unix ts>/
       inputs: [duration]
 ```
 
@@ -63,8 +66,9 @@ role) — never from a YAML, never committed.
 
 ## Docs
 
-- [doc/design.md](doc/design.md) — contract spec + decision log. **Read this first.**
-- [doc/progress.md](doc/progress.md) — component status, test map, known limitations
+- [doc/design.md](doc/design.md) — contract spec, the reasoning behind it, known limitations. **Read this first.**
+- [doc/test.md](doc/test.md) — what each test file pins down
+- [doc/log.md](doc/log.md) — the decision log, #1–#50: how the contract got here
 - [doc/components/](doc/components/) — per-component detail:
   [lazyraw + cache](doc/components/lazyraw-cache.md) ·
   [artifact union](doc/components/artifact-union.md) ·
@@ -72,8 +76,8 @@ role) — never from a YAML, never committed.
   [pipeline + executor](doc/components/executor.md) ·
   [kernels](doc/components/kernels.md) ·
   [loaders](doc/components/loaders.md) ·
-  [dumper](doc/components/dumper.md) ·
+  [archiver](doc/components/archiver.md) ·
   [DJI telemetry](doc/components/dji-telemetry.md) ·
   [visualiser](doc/components/vis.md)
 - [doc/uml/index.html](doc/uml/index.html) — architecture diagrams of the framework
-  (self-contained, open in a browser); [mermaid source](doc/uml/README.md)
+  (self-contained, open in a browser)

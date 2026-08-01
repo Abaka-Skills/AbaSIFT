@@ -36,13 +36,13 @@ def _pipeline(videos, target=None, max_s=None):
     if target:
         nodes.append(
             {
-                "name": "dump_report",
-                "kernel": "abasift.kernels.DataDumper",
+                "name": "archive_report",
+                "kernel": "abasift.kernels.DataArchiver",
                 "params": {"keys": ["__report__"], "target": str(target)},
                 "inputs": ["duration"],
             }
         )
-    return Pipeline.from_dict({"name": "basic_video_qc", "job_id": "demo", "nodes": nodes})
+    return Pipeline.from_dict({"job_id": "demo", "nodes": nodes})
 
 
 @pytest.fixture(scope="module")
@@ -100,13 +100,17 @@ def test_cli_run_writes_a_report(videos, tmp_path, capsys):
     assert main(["run", str(yaml_path), "-o", str(out)]) == 0
     doc = json.loads(out.read_text())
     assert doc["job"]["counts"] == {"pass": 3, "warn": 0, "fail": 0, "error": 1}
-    assert (tmp_path / "dumped" / "demo" / "dump_report" / "report.json").exists()
-    assert "summary[duration]" in capsys.readouterr().out
+    job_dir = f"demo_{doc['job']['pipeline_hash']}"
+    assert (tmp_path / "dumped" / job_dir / "archive_report" / "report.json").exists()
+    printed = capsys.readouterr().out
+    # The terminal says the same thing the document does, node by node.
+    assert "duration[VideoDurationKernel]\n  video_length  pass=3 error=1" in printed
+    assert "4 samples in 2 batches" in printed and "pass=3 warn=0 fail=0 error=1" in printed
 
 
 def test_cli_validate_rejects_a_broken_yaml(tmp_path, capsys):
     bad = tmp_path / "bad.yaml"
-    bad.write_text("pipeline:\n  name: x\n  nodes:\n    - name: a\n      kernel: nope.Nope\n")
+    bad.write_text("pipeline:\n  job_id: x\n  nodes:\n    - name: a\n      kernel: nope.Nope\n")
     assert main(["validate", str(bad)]) == 2
     assert "error:" in capsys.readouterr().err
 

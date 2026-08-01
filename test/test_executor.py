@@ -1,4 +1,4 @@
-"""Execution semantics: branch parallelism, decode sharing, the failsafe layers, dumping."""
+"""Execution semantics: branch parallelism, decode sharing, the failsafe layers, archiving."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ RECORD = "kernels_for_test.RecordingKernel"
 
 
 def _run(nodes, name="t", job_id="jid"):
-    pipeline = Pipeline.from_dict({"name": name, "job_id": job_id, "nodes": nodes})
+    pipeline = Pipeline.from_dict({"job_id": job_id, "nodes": nodes})
     ex = Executor(pipeline)
     return ex.run(), ex.artifacts
 
@@ -101,54 +101,62 @@ def test_dumper_writes_the_finished_report(tmp_path):
             {"name": "a", "kernel": TOUCH, "inputs": ["load"]},
             {
                 "name": "dump",
-                "kernel": "abasift.kernels.DataDumper",
+                "kernel": "abasift.kernels.DataArchiver",
                 "params": {"keys": ["__report__"], "target": str(target)},
                 "inputs": ["a"],
             },
         ],
         job_id="deterministic",
     )
-    path = target / "deterministic" / "dump" / "report.json"
-    assert path.exists(), "dump path must be f(job_id, node, key) with no timestamps"
+    job_dir = f"deterministic_{report.job['pipeline_hash']}"
+    path = target / job_dir / "dump" / "report.json"
+    assert path.exists(), "dump path must be f(job_id, hash, node, key) with no timestamps"
     dumped = json.loads(path.read_text())
-    # Dumped after the finalize pass: the job block is complete, not half-written.
+    # Dumped after the digest pass: the job block is complete, not half-written.
     assert dumped["job"]["counts"] == report.counts()
     assert dumped["job"]["n_samples"] == 2
     assert artifacts["dump/report_uri"].endswith("report.json")
 
 
-def test_dump_target_defaults_to_a_stamped_relative_tree(tmp_path, monkeypatch):
-    """No `target:` in YAML -> ./dump/<unix ts>/<job_id>/<node>/, never an absolute path."""
+def test_dump_target_defaults_to_a_job_tree_with_a_run_per_timestamp(tmp_path, monkeypatch):
+    """No `target:` -> ./dump/<job_id>_<hash>/<unix ts>/<node>/, never an absolute path.
+
+    Job first, run second: every run of a shard is then listable in one directory.
+    """
     monkeypatch.chdir(tmp_path)  # the default is relative to the working directory
     before = int(time.time())
     report, _artifacts = _run(
         [
             {"name": "load", "kernel": SYNTH, "params": {"n": 1, "batch_size": 1}, "inputs": []},
-            {"name": "dump", "kernel": "abasift.kernels.DataDumper", "inputs": ["load"]},
+            {"name": "dump", "kernel": "abasift.kernels.DataArchiver", "inputs": ["load"]},
         ],
         job_id="stamped",
     )
     stamp = report.job["started_unix"]
     assert isinstance(stamp, int) and before <= stamp <= int(time.time())
-    assert (tmp_path / "dump" / str(stamp) / "stamped" / "dump" / "report.json").exists()
+    job_root = tmp_path / "dump" / f"stamped_{report.job['pipeline_hash']}"
+    assert (job_root / str(stamp) / "dump" / "report.json").exists()
+    assert (job_root / str(stamp) / "dump" / "pipeline.json").exists()
+    # The config sits beside the runs, not inside one: they all share it.
+    assert (job_root / "pipeline.yaml").exists()
 
 
 def test_an_explicit_target_is_used_verbatim_and_undated(tmp_path):
     """The no-timestamps rule still holds where it matters: a configured target."""
     target = tmp_path / "out"
-    _run(
+    report, _ = _run(
         [
             {"name": "load", "kernel": SYNTH, "params": {"n": 1, "batch_size": 1}, "inputs": []},
             {
                 "name": "dump",
-                "kernel": "abasift.kernels.DataDumper",
+                "kernel": "abasift.kernels.DataArchiver",
                 "params": {"target": str(target)},
                 "inputs": ["load"],
             },
         ],
         job_id="pinned",
     )
-    assert (target / "pinned" / "dump" / "report.json").exists()
+    assert (target / f"pinned_{report.job['pipeline_hash']}" / "dump" / "report.json").exists()
     assert not list(target.glob("[0-9]" * 8)), "an explicit target must not gain a stamp segment"
 
 
@@ -160,7 +168,7 @@ def test_dumper_free_mode_drops_the_key(tmp_path):
             {"name": "sink", "kernel": RECORD, "inputs": ["a"]},
             {
                 "name": "free",
-                "kernel": "abasift.kernels.DataDumper",
+                "kernel": "abasift.kernels.DataArchiver",
                 "params": {"keys": ["sink/seen/*"], "target": ""},
                 "inputs": ["sink"],
             },
@@ -169,12 +177,150 @@ def test_dumper_free_mode_drops_the_key(tmp_path):
     assert "sink/seen/0" not in artifacts
 
 
+def test_archive_mode_replaces_the_key_the_job_union_carries(tmp_path):
+    """A replacement must win over the pre-mutation copy its own ancestor still holds.
+
+    Only the *leaf* unions are merged per batch, so the dumped node's stale value never
+    gets a vote. Merging every node instead is what used to make this an ExecutorError.
+    """
+    target = tmp_path / "out"
+    _report, artifacts = _run(
+        [
+            {"name": "load", "kernel": SYNTH, "params": {"n": 2, "batch_size": 2}, "inputs": []},
+            {"name": "sink", "kernel": RECORD, "inputs": ["load"]},
+            {
+                "name": "dump",
+                "kernel": "abasift.kernels.DataArchiver",
+                "params": {"keys": ["sink/seen/*"], "target": str(target)},
+                "inputs": ["sink"],
+            },
+        ]
+    )
+    handle = artifacts["sink/seen/0"]
+    assert handle.decoder == "json"  # no longer the list the kernel returned
+    assert handle.decode() == ["s0", "s1"]  # ...but the same information, on disk
+
+
+def test_a_delete_in_one_branch_is_not_resurrected_by_its_sibling(tmp_path):
+    """Merging leaves is not enough on its own: sibling leaves disagree, and delete wins.
+
+    `free` removed the key; `reader` is a *sibling* leaf that never saw the removal and
+    still carries it. The union's sticky `deleted` set is what settles it.
+    """
+    _report, artifacts = _run(
+        [
+            {"name": "load", "kernel": SYNTH, "params": {"n": 2, "batch_size": 2}, "inputs": []},
+            {"name": "mid", "kernel": RECORD, "inputs": ["load"]},
+            {"name": "reader", "kernel": TOUCH, "inputs": ["mid"]},
+            {
+                "name": "free",
+                "kernel": "abasift.kernels.DataArchiver",
+                "params": {"keys": ["mid/seen/*"], "target": ""},
+                "inputs": ["mid"],
+            },
+        ]
+    )
+    assert "mid/seen/0" not in artifacts
+
+
+def test_a_mid_graph_node_still_reaches_the_job_union(tmp_path):
+    """Merging leaves must not lose the middle of the graph — leaves already contain it."""
+    report, artifacts = _run(
+        [
+            {"name": "load", "kernel": SYNTH, "params": {"n": 2, "batch_size": 2}, "inputs": []},
+            {"name": "mid", "kernel": RECORD, "inputs": ["load"]},
+            {"name": "leaf", "kernel": RECORD, "inputs": ["mid"]},
+            {"name": "other", "kernel": RECORD, "inputs": ["load"]},
+        ]
+    )
+    assert artifacts["mid/seen/0"] == ["s0", "s1"]  # mid is not a leaf, and is still here
+    assert artifacts["leaf/seen/0"] == ["s0", "s1"]
+    assert artifacts["other/seen/0"] == ["s0", "s1"]  # a second leaf still contributes
+    assert not report.samples  # these kernels judge nothing at all; findings tested below
+
+
+def test_a_mid_graph_nodes_findings_still_reach_the_job_report():
+    """The report is merged over leaves too — and a leaf carries its ancestors' checks."""
+    report, _artifacts = _run(
+        [
+            {"name": "load", "kernel": SYNTH, "params": {"n": 2, "batch_size": 2}, "inputs": []},
+            {"name": "mid", "kernel": TOUCH, "inputs": ["load"]},
+            {"name": "leaf", "kernel": TOUCH, "inputs": ["mid"]},
+        ]
+    )
+    for entry in report.samples.values():
+        assert set(entry["checks"]) == {"mid/touched", "leaf/touched"}
+
+
+def test_the_two_documents_split_per_sample_from_per_pipeline(tmp_path):
+    """`report.json` says what happened to each sample; `pipeline.json` what was run."""
+    target = tmp_path / "out"
+    report, _ = _run(
+        [
+            {"name": "load", "kernel": SYNTH, "params": {"n": 2, "batch_size": 2}, "inputs": []},
+            {"name": "a", "kernel": TOUCH, "inputs": ["load"]},
+            {
+                "name": "dump",
+                "kernel": "abasift.kernels.DataArchiver",
+                "params": {"target": str(target)},  # default keys = both documents
+                "inputs": ["a"],
+            },
+        ],
+        job_id="split",
+    )
+    job_root = target / f"split_{report.job['pipeline_hash']}"
+    samples = json.loads((job_root / "dump" / "report.json").read_text())
+    pipeline = json.loads((job_root / "dump" / "pipeline.json").read_text())
+
+    assert set(samples) == {"schema_version", "job", "samples"}
+    assert len(samples["samples"]) == 2
+    assert "threshold" not in json.dumps(samples), "identical across samples -> not per sample"
+
+    assert set(pipeline) == {"schema_version", "job", "pipeline", "nodes"}
+    assert "samples" not in pipeline
+    (node,) = [n for n in pipeline["nodes"] if n["name"] == "a"]
+    assert node["kernel"] == TOUCH  # what the node is...
+    assert node["checks"]["touched"]["counts"] == {"pass": 2}  # ...and what it did
+    assert [n["name"] for n in pipeline["nodes"]] == ["load", "a", "dump"], "each node once"
+    assert pipeline["job"] == samples["job"], "same job block, so either file reads alone"
+    # The config that produced them, beside the runs rather than inside one.
+    assert (job_root / "pipeline.yaml").exists()
+
+
+def test_an_edited_yaml_dumps_beside_the_old_run_rather_than_over_it(tmp_path):
+    """`{job_id}_{hash}`: a retry overwrites, an *edit* lands somewhere new.
+
+    Same shard id, different thresholds — overwriting would destroy the artifacts behind
+    a verdict someone may already have read.
+    """
+    target = tmp_path / "out"
+
+    def run_with(n):
+        return _run(
+            [
+                {"name": "load", "kernel": SYNTH, "params": {"n": n, "batch_size": 1}, "inputs": []},
+                {
+                    "name": "dump",
+                    "kernel": "abasift.kernels.DataArchiver",
+                    "params": {"keys": ["__report__"], "target": str(target)},
+                    "inputs": ["load"],
+                },
+            ],
+            job_id="shard_7",
+        )[0]
+
+    first, second = run_with(1), run_with(2)
+    dirs = sorted(p.name for p in target.iterdir())
+    assert dirs == sorted({f"shard_7_{first.job['pipeline_hash']}", f"shard_7_{second.job['pipeline_hash']}"})
+    assert len(dirs) == 2, "the same id under a different definition must not clobber"
+
+
 def test_rerunning_the_same_yaml_overwrites_the_same_paths(tmp_path):
     nodes = [
         {"name": "load", "kernel": SYNTH, "params": {"n": 1, "batch_size": 1}, "inputs": []},
         {
             "name": "dump",
-            "kernel": "abasift.kernels.DataDumper",
+            "kernel": "abasift.kernels.DataArchiver",
             "params": {"keys": ["__report__"], "target": str(tmp_path / "out")},
             "inputs": ["load"],
         },

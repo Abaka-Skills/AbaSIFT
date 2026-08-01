@@ -2,7 +2,7 @@
 
 Small on purpose: it shows the whole contract in 40 lines. Measure one thing per sample,
 judge it against YAML thresholds, emit a per-sample artifact, then reduce those artifacts
-into a dataset summary in ``finalize()``.
+into a dataset summary in ``digest()``.
 
 Cost note: it decodes ``video_meta``, which reads the container header over a ranged GET
 (0.25% of a 178 MB file). Probing a 15 GB delivery costs megabytes.
@@ -46,10 +46,10 @@ class VideoDurationKernel(SampleKernel):
                 "verdict": "too_short" if too_short else "too_long" if too_long else "in_range",
             },
         )
-        # Per-sample artifact key: disjoint across batches, so finalize() can reduce it.
+        # Per-sample artifact key: disjoint across batches, so digest() can reduce it.
         return {self.check_name: check}, {f"duration_s/{sample.sample_id}": duration}
 
-    def finalize(self, art: ArtifactUnion, report: ReportView) -> tuple[ArtifactExt, ReportExt]:
+    def digest(self, art: ArtifactUnion, report: ReportView) -> tuple[ArtifactExt, ReportExt]:
         durations = art.per_sample(self.node_name, "duration_s")
         if not durations:
             return {}, ReportExt(summary={"n_videos": 0})

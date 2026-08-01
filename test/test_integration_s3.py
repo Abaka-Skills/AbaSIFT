@@ -34,15 +34,16 @@ def _n(default: int) -> int:
 def _run(nodes, name, tmp_path):
     nodes = list(nodes) + [
         {
-            "name": "dump_report",
-            "kernel": "abasift.kernels.DataDumper",
+            "name": "archive_report",
+            "kernel": "abasift.kernels.DataArchiver",
             "params": {"keys": ["__report__"], "target": str(tmp_path / "out")},
             "inputs": [nodes[-1]["name"]],
         }
     ]
-    ex = Executor(Pipeline.from_dict({"name": name, "job_id": "itest", "nodes": nodes}))
+    ex = Executor(Pipeline.from_dict({"job_id": "itest", "nodes": nodes}))
     report = ex.run()
-    assert (tmp_path / "out" / "itest" / "dump_report" / "report.json").exists()
+    dumped = tmp_path / "out" / f"itest_{report.job['pipeline_hash']}" / "archive_report" / "report.json"
+    assert dumped.exists()
     return report, ex.artifacts
 
 

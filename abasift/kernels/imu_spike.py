@@ -114,7 +114,7 @@ class ImuSpikeKernel(SampleKernel):
             },
         )
 
-    def finalize(self, art: ArtifactUnion, report: ReportView) -> tuple[ArtifactExt, ReportExt]:
+    def digest(self, art: ArtifactUnion, report: ReportView) -> tuple[ArtifactExt, ReportExt]:
         spikes = art.per_sample(self.node_name, "n_spikes")
         zs = art.per_sample(self.node_name, "max_z")
         if not spikes:

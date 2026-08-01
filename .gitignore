@@ -10,7 +10,7 @@ dist/
 .venv/
 env/
 
-# DataDumper's default target: ./dump/<mmddyyyy>/<job_id>/<node>/
+# Default target of anything that writes (archiver, dumper): ./dump/<job>_<hash>/<ts>/<node>/
 /dump/
 
 # scratch: CLI report output at the repo root (`abasift run -o rep.json`)
@@ -21,3 +21,5 @@ env/
 *.MP4
 *.mov
 *.MOV
+
+_dev_tmp/

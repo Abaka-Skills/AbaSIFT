@@ -37,19 +37,48 @@ deliberate: the easiest way to blow up a worker is a kernel author reaching for 
 me the bytes" on a 2 GB video.
 
 Nothing ever holds a whole video in memory: `local_path()` downloads via
-`fs.get_file` (chunked), and `DataDumper` copies with `shutil.copyfileobj` in 8 MB chunks.
+`fs.get_file` (chunked), and `DataArchiver` copies with `shutil.copyfileobj` in 8 MB chunks.
 
 ## Tier 1 — worker-global disk cache (`cache.py`)
 
 - Keyed by URI (`sha256[:32]` + original suffix, so ffmpeg can still sniff the format).
-- Size-capped LRU, default 32 GB; `ABASIFT_CACHE_DIR` / `ABASIFT_CACHE_GB` override.
-  mtime is the LRU clock (atime is unreliable under `relatime`), touched on every hit.
+- Size-capped LRU. mtime is the LRU clock (atime is unreliable under `relatime`), touched
+  on every hit.
 - Download goes to a `.part-<pid>-<tid>` sibling and is atomically `os.replace`d, so a
   crash can never expose a truncated file and a retried job is idempotent.
 - Per-URI locks: N threads asking for the same video download it **once**. The S3
   integration suite asserts this (`test_the_same_video_is_downloaded_once_for_two_streams`).
 - Eviction runs on insert. Evicting a file another thread has open is safe on POSIX — the
   descriptor stays valid after `unlink`.
+
+### Where it lives, and how to change it
+
+```yaml
+pipeline:
+  name: ...
+  cache:
+    dir: /scratch/abasift        # optional
+    size_gb: 200                 # optional
+```
+
+**YAML > environment > built-in default**, per setting:
+
+| | |
+|---|---|
+| `pipeline.cache.dir` / `size_gb` | most specific — the job says what it needs |
+| `ABASIFT_CACHE_DIR` / `ABASIFT_CACHE_GB` | the machine's answer, when the YAML is silent |
+| `$TMPDIR/abasift-cache`, 32 GiB | the default: works everywhere, cleaned by the OS |
+
+The two keys are strict (a typo is a load-time `PipelineError`) and independent — set only
+`size_gb` and the directory still comes from the env or the default. Nothing else about
+the cache is configurable, and **credentials never are**: the YAML says where bytes land,
+never who you are (design §7).
+
+A pipeline that says nothing about the cache does **not** install one. That matters
+because the cache is process-global: silence leaves whatever is already there, which is
+how a test fixture or an embedding program keeps the cache it deliberately installed.
+Applied in `Executor.__init__`, so it is settled before any kernel can read a byte, and
+the resolved root and cap are printed in the startup banner.
 
 ## Tier 2 — in-memory decode memo (`lazy.py`)
 

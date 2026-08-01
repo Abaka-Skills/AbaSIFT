@@ -10,7 +10,6 @@
 # one decode cache — that is what the two independent edges out of `load` buy.
 #   abasift run pipelines/imu_spike_egoverse_dji.yaml -o /tmp/imu_report.json
 pipeline:
-  name: egoverse_dji_imu_qc
   job_id: egoverse_dji_imu
   nodes:
     - name: load
@@ -37,9 +36,10 @@ pipeline:
         max_spikes: 5       # more than a handful means the stream is corrupt
       inputs: [load]
 
-    - name: dump_report
-      kernel: abasift.kernels.DataDumper
+    - name: archive_report
+      kernel: abasift.kernels.DataArchiver
       params:
-        keys: ["__report__"]
-        # No `target:` — defaults to ./dump/<unix ts>/<job_id>/<node>/.
+        keys: ["__report__", "__pipeline__"]   # per-sample verdicts, plus the job and its config
+        # No `target:` — defaults to ./dump/<job_id>_<hash>/<unix ts>/<node>/, with the
+        # config copied to ./dump/<job_id>_<hash>/pipeline.yaml.
       inputs: [duration, imu]   # join: the executor unions both branches

@@ -113,7 +113,7 @@ class PipelineView:
         """
         try:
             model = self.model()
-            inner, name, live = body(model), model["pipeline"]["name"], model["live"]
+            inner, name, live = body(model), model["pipeline"]["job_id"], model["live"]
         except AbaSiftError as e:
             inner, name, live = error_body(type(e).__name__, str(e), str(self.yaml_path)), "error", self.state()
         except Exception as e:
@@ -148,7 +148,7 @@ class RunView:
     def html(self, full: bool = True) -> str:
         model = self.model()
         inner = body(model)
-        return page(model["pipeline"]["name"], inner, model["live"]) if full else inner
+        return page(model["pipeline"]["job_id"], inner, model["live"]) if full else inner
 
 
 def _stamp(path: Path | None) -> str:

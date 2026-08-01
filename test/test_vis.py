@@ -30,7 +30,6 @@ ROOT = Path(__file__).resolve().parents[1]
 
 #: load -> {dur, touch} -> dump. A diamond, so layering and joins are both exercised.
 DIAMOND = {
-    "name": "vis_demo",
     "job_id": "vis_demo",
     "nodes": [
         {"name": "load", "kernel": SYNTH, "params": {"n": 4, "batch_size": 2}, "inputs": []},
@@ -43,7 +42,7 @@ DIAMOND = {
         {"name": "touch", "kernel": TOUCH, "inputs": ["load"]},
         {
             "name": "dump",
-            "kernel": "abasift.kernels.DataDumper",
+            "kernel": "abasift.kernels.DataArchiver",
             "params": {"keys": ["__report__"]},
             "inputs": ["dur", "touch"],
         },
@@ -61,7 +60,7 @@ def scratch_cwd(tmp_path, monkeypatch):
     """Run every test in this file from a throwaway directory.
 
     ``DIAMOND``'s dumper sets no ``target:``, so it writes to the *relative* default
-    ``dump/<unix ts>/<job_id>/<node>/`` — which is the repo root unless we move. A suite
+    ``dump/<unix ts>/<job_id>_<hash>/<node>/`` — which is the repo root unless we move. A suite
     must not leave artifacts in the working tree, gitignored or not.
     """
     monkeypatch.chdir(tmp_path)
@@ -96,9 +95,9 @@ def test_roles_and_columns_come_from_the_dag(model):
 def test_the_source_kernel_shows_its_own_interface(model):
     """Node 0 is not a Kernel: it must be described by ``iter_batches``, not ``run``."""
     load = node(model, "load")
-    assert [m["name"] for m in load["methods"]] == ["iter_batches", "finalize"]
+    assert [m["name"] for m in load["methods"]] == ["iter_batches", "digest"]
     assert method(load, "iter_batches")["own"] is True
-    assert method(load, "finalize")["owner"] == "SourceKernel"
+    assert method(load, "digest")["owner"] == "SourceKernel"
     assert load["is_source"] and load["interface"] == "SourceKernel"
 
 
@@ -116,7 +115,7 @@ def test_a_check_kernel_shows_what_it_wrote_and_what_it_inherited(model):
 
 def test_a_mutating_kernel_is_described_by_its_mutating_interface(model):
     dump = node(model, "dump")
-    assert [m["name"] for m in dump["methods"]] == ["run_mutating", "finalize_mutating"]
+    assert [m["name"] for m in dump["methods"]] == ["run_mutating", "commit"]
     assert all(m["own"] for m in dump["methods"])
 
 
@@ -236,7 +235,7 @@ def test_editing_the_yaml_moves_the_state_and_the_page_follows(hosted):
 
 
 def test_a_broken_yaml_is_shown_not_fatal(hosted):
-    rewrite(hosted.yaml, "pipeline: {name: broken, nodes: []}")
+    rewrite(hosted.yaml, "pipeline: {job_id: broken, nodes: []}")
     shown = hosted.get("/body")
     assert "PipelineError" in shown and "nodes is empty" in shown
 
@@ -263,7 +262,7 @@ def probe_pipeline(tmp_path, dotted: str) -> Path:
         yaml.safe_dump(
             {
                 "pipeline": {
-                    "name": "hot",
+                    "job_id": "hot",
                     "nodes": [
                         {"name": "load", "kernel": SYNTH, "inputs": []},
                         {"name": "probe", "kernel": dotted, "inputs": ["load"]},
@@ -395,5 +394,5 @@ def test_the_run_view_does_not_re_read_the_yaml_mid_run(tmp_path):
     yaml_path.write_text(yaml.safe_dump({"pipeline": DIAMOND}))
     view = RunView(Pipeline.from_yaml(yaml_path), LiveJob(), yaml_path)
 
-    rewrite(yaml_path, yaml.safe_dump({"pipeline": {"name": "swapped", "nodes": []}}))
+    rewrite(yaml_path, yaml.safe_dump({"pipeline": {"job_id": "swapped", "nodes": []}}))
     assert 'data-node="dump"' in view.html()

@@ -1,0 +1,66 @@
+# Demo 3 — proxy videos: decode once, judge, and write an exhibit beside the verdict.
+#
+# The shape this demo exists to show is `load -> frames -> {check, dumper}`: one node
+# decodes the video into a frame stack, everything downstream shares that one decode, and
+# the writer turns the stack back into something a person can watch. A failed take is much
+# easier to argue about with a proxy of it attached to the finding.
+#
+# Unlike the duration probe, this one reads whole videos: VideoFrameKernel materialises each
+# source into the worker disk cache and writes a raw rgb24 stack next to it. `frames` takes
+# no `fps`, so it keeps every frame — the default, because a subsampled stack cannot show a
+# defect that fell between its frames. That is the expensive answer: raw rgb24 is larger than
+# the compressed source it came from (640 px wide is ~0.7 MB *per frame-second* at 1 fps, so
+# a full-rate 30 fps stack is ~20 MB per second of footage). `width` and an explicit `fps`
+# are the two dials, `cache.size_gb` is the cap the LRU enforces, and
+# `frames.summary.cache_bytes` in the report is what either one actually cost.
+#   abasift run pipelines/proxy_video_egoverse_flat.yaml -o /tmp/proxy_report.json
+pipeline:
+  job_id: egoverse_flat_proxy
+  cache:
+    size_gb: 64           # raw stacks live here; the default 32 GiB is thin for this DAG
+
+  nodes:
+    - name: load
+      kernel: abasift.loaders.FlatDirLoader
+      params:
+        root: s3://egocentric-data-delivery/1_test_20260730
+        batch_size: 1     # one whole video in flight; batch size is a memory dial here
+        order: size       # ascending: cheapest samples first
+        max_samples: 3
+      inputs: []
+
+    - name: duration
+      kernel: abasift.kernels.VideoDurationKernel
+      params:
+        min_s: 1.0
+        max_s: 1800.0
+      inputs: [load]
+
+    - name: frames
+      kernel: abasift.kernels.VideoFrameKernel
+      params:
+        width: 640        # height follows the source aspect ratio.
+                          # No `fps:` — every frame is kept. Add one (`fps: 1.0`) to trade
+                          # temporal resolution for disk once a check says it can afford to.
+      inputs: [load]
+
+    - name: proxy
+      kernel: abasift.kernels.VideoDumper
+      params:
+        fps: 30           # playback rate, independent of the stack's own rate: N frames in,
+                          # N frames out, played at 30 — so over a full-rate stack this is
+                          # ~real time, and over a 1 fps one it would be a 30x timelapse.
+                          # Omit it and the proxy always plays at the rate it was sampled.
+        codec: libx264
+        # No `target:` — defaults to ./dump/<job_id>_<hash>/<unix ts>/proxy/<sample>.mp4.
+        # An external splitter would set one, which is used verbatim so a retry is idempotent.
+      inputs: [frames]
+
+    - name: archive_report
+      kernel: abasift.kernels.DataArchiver
+      params:
+        keys: ["__report__", "__pipeline__"]
+        # The frame stacks are deliberately *not* freed here: `frames` reduces them in
+        # digest() (n_frames, cache_bytes), and a freed key reduces to nothing. They are
+        # disk-cache entries, so the LRU reclaims them under `cache.size_gb` anyway.
+      inputs: [duration, proxy]   # join: the verdict branch and the exhibit branch

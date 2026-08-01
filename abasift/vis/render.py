@@ -29,7 +29,7 @@ _ROLE_LABEL = {
 
 def render(model: dict) -> str:
     """The whole page for one described pipeline."""
-    return page(model["pipeline"]["name"], body(model), model.get("live"))
+    return page(model["pipeline"]["job_id"], body(model), model.get("live"))
 
 
 def page(name: str, inner: str, live: str | None = None) -> str:
@@ -120,7 +120,6 @@ def error_body(title: str, detail: str, source: str = "") -> str:
 def _header(model: dict) -> str:
     p = model["pipeline"]
     bits = [
-        f"<span class='mono'>{escape(p['job_id'])}</span>",
         f"{p['n_nodes']} nodes in {model['n_layers']} stages",
         f"source <span class='mono'>{escape(p['source'])}</span>",
         f"hash <span class='mono'>{escape(p['hash'])}</span>",
@@ -131,7 +130,7 @@ def _header(model: dict) -> str:
     live = "<span class='pill-live'>live</span>" if model.get("live") else ""
     return (
         "<div class='top'>"
-        f"<h1>{escape(p['name'])}{live}</h1>"
+        f"<h1>{escape(p['job_id'])}{live}</h1>"
         "<button id='theme' type='button'>theme</button>"
         "</div>"
         f"<p class='meta'>{''.join(f'<span>{b}</span>' for b in bits)}</p>"

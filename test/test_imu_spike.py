@@ -88,14 +88,14 @@ def test_track_too_short_is_an_error_not_a_verdict():
     assert artifacts == {}
 
 
-def test_finalize_reduces_over_the_dataset():
+def test_digest_reduces_over_the_dataset():
     nodes = [
         {"name": "load", "kernel": "kernels_for_test.SyntheticLoader",
          "params": {"n": 3, "batch_size": 2, "decoder": "test_imu_stream"}, "inputs": []},
         {"name": "imu", "kernel": "abasift.kernels.ImuSpikeKernel",
          "params": {"stream": "blob/main", "max_spikes": 0}, "inputs": ["load"]},
     ]
-    report = Executor(Pipeline.from_dict({"name": "imu", "nodes": nodes})).run()
+    report = Executor(Pipeline.from_dict({"job_id": "imu", "nodes": nodes})).run()
     summary = report.summary["imu"]
     assert summary["n_tracks"] == 3
     assert summary["tracks_with_spikes"] == 1  # only sample s1 gets an injected impulse

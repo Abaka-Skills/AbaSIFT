@@ -79,7 +79,7 @@ class ArtifactUnion:
     Immutable by construction: ``extended`` / ``union`` / ``with_mutations`` all return a
     new instance, so concurrent DAG branches can never see a half-written union.
 
-    ``deleted`` records keys a ``DataDumper`` removed, so a delete is not resurrected by
+    ``deleted`` records keys a ``DataArchiver`` removed, so a delete is not resurrected by
     a later join with a branch that still carries the key.
     """
 
@@ -124,11 +124,33 @@ class ArtifactUnion:
     def per_sample(self, node: str, name: str) -> dict[str, Any]:
         """A node's per-sample artifacts (``"{name}/{sample_id}"``), keyed by sample id.
 
-        The mirror of the convention :meth:`SampleKernel.check` writes, so a ``finalize()``
+        The mirror of the convention :meth:`SampleKernel.check` writes, so a ``digest()``
         reduce reads its own artifacts back without re-deriving the prefix surgery.
         """
         prefix = f"{name}/"
         return {k[len(prefix):]: v for k, v in self.under(node).items() if k.startswith(prefix)}
+
+    def find_lazy(self, sample_id: str, decoder: str, node: str | None = None) -> dict[str, "LazyRaw"]:
+        """One sample's ``LazyRaw`` artifacts of a given decoder, keyed by full union key.
+
+        The mirror of :meth:`per_sample` for a *consumer*: it names the decoder it can read
+        rather than the node some YAML happened to name — the same reasoning as
+        :meth:`find_batch`. Ambiguity is left to the caller, which is the
+        only one that knows what to tell its pipeline author.
+
+        Matching is on the key's suffix, not its last segment: a sample id may contain
+        slashes (``FlatDirLoader`` with ``recursive`` ids a sample by its relative path).
+        """
+        suffix = f"/{sample_id}"
+        prefix = None if node is None else f"{node}/"
+        return {
+            key: value
+            for key, value in self._data.items()
+            if key.endswith(suffix)
+            and isinstance(value, LazyRaw)
+            and value.decoder == decoder
+            and (prefix is None or key.startswith(prefix))
+        }
 
     def find_batch(self) -> Batch | None:
         """The ``Batch`` travelling in this union, or ``None`` if there is none."""
@@ -167,7 +189,7 @@ class ArtifactUnion:
             if key in data and not _same(data[key], value):
                 raise ExecutorError(
                     f"artifact key {key!r} arrived with two different values; "
-                    "per-batch aggregates belong in finalize(), not run()"
+                    "per-batch aggregates belong in digest(), not run()"
                 )
             data[key] = value
         deleted = self._deleted | other._deleted
@@ -178,7 +200,7 @@ class ArtifactUnion:
     def with_mutations(
         self, replace: Mapping[str, Any] = (), delete: frozenset[str] = frozenset()
     ) -> "ArtifactUnion":
-        """Sanctioned mutation — ``DataDumper`` only (dump->LazyRaw swap, or free).
+        """Sanctioned mutation — ``DataArchiver`` only (archive->LazyRaw swap, or free).
 
         Ordinary kernels must never call this; they return extensions.
         """
@@ -216,7 +238,7 @@ def _same(a: Any, b: Any) -> bool:
 
 
 def jsonable(v: Any) -> Any:
-    """Best-effort JSON projection of an artifact value. Used by the union and the dumper."""
+    """Best-effort JSON projection of an artifact value. Used by the union and the archiver."""
     if isinstance(v, LazyRaw):
         return v.to_json()
     if isinstance(v, Batch):

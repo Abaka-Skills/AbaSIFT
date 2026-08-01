@@ -94,13 +94,13 @@ you can leave one node's detail open and watch its verdicts land.
 ## What the sheet shows
 
 **Role.** Node 0 is a `SourceKernel`, so it is described by `iter_batches()` — it has no
-`run`. A check kernel is a `SampleKernel` and is described by `check`. A dumper is a
-`MutatingKernel` and is described by `run_mutating` / `finalize_mutating`. Colour and
+`run`. A check kernel is a `SampleKernel` and is described by `check`. An archiver is a
+`MutatingKernel` and is described by `run_mutating` / `commit`. Colour and
 badge follow the interface, so the one node allowed to mutate the union is visibly
 different from the ones that aren't.
 
 **Own vs inherited.** Each signature says which class actually implements it. This is the
-most useful line on the page: `ImuSpikeKernel` writes `check` and `finalize` and inherits
+most useful line on the page: `ImuSpikeKernel` writes `check` and `digest` and inherits
 `run` from `SampleKernel` — i.e. the batch loop, the skip-if-already-failed filter and the
 per-sample failsafe are the framework's, not the kernel author's. The division of labour
 is visible instead of documented.
@@ -111,7 +111,7 @@ parameters explicitly — no `**kwargs` catch-all — which is the same property
 mistyped threshold into a load-time `PipelineError`.
 
 **This run** *(only under `run --vis`)*. Verdict counts per check and the node's
-`finalize` summary. `describe()` never produces this: the static view has no opinion about
+`digest` summary. `describe()` never produces this: the static view has no opinion about
 any run, and `live.overlay()` is what adds it.
 
 ## Layout

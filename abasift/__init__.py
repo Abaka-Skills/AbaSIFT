@@ -1,7 +1,7 @@
 """AbaSift — distributed QC framework for egocentric vendor datasets.
 
 A job is one pipeline YAML run on one machine. Work distribution is external.
-See ``doc/design.md`` for the contract and the decision log.
+See ``doc/design.md`` for the contract.
 """
 
 from . import decoders  # imported for effect: registers the built-in decoders
@@ -10,7 +10,7 @@ from .errors import AbaSiftError, DecodeError, ExecutorError, MissingStream, Pip
 from .executor import Executor, run_pipeline
 from .kernel import ArtifactExt, Kernel, Mutation, MutatingKernel, SampleKernel, SourceKernel
 from .lazy import LazyRaw, register_decoder
-from .payloads import ImuTrack, VideoMeta
+from .payloads import ImuTrack, VideoFrames, VideoMeta
 from .pipeline import Pipeline
 from .report import Check, Report, ReportExt, ReportView
 
@@ -40,6 +40,7 @@ __all__ = [
     "Sample",
     "SampleKernel",
     "SourceKernel",
+    "VideoFrames",
     "VideoMeta",
     "register_decoder",
     "run_pipeline",

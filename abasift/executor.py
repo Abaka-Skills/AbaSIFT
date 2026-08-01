@@ -1,14 +1,16 @@
-"""Single-machine executor: per-batch streaming through the DAG + terminal finalize.
+"""Single-machine executor: per-batch streaming through the DAG, then digest and commit.
 
     for each batch yielded by the source:
         run the downstream DAG on it
           - independent branches run concurrently on threads
           - a node sees exactly the union (and the report) of its ancestors
           - branches over one sample share one decoded copy (LazyRaw memo)
-        merge the batch's per-sample fragments into the job union/report
+        merge the leaf nodes' unions and reports into the job's (a leaf already holds
+          every ancestor's artifacts and findings, and holds them *post*-mutation)
         release the batch's decoded payloads
-    then: finalize() per kernel in topo order  -> summaries
-          finalize_mutating() for DataDumpers  -> dump the finished report
+    then: digest() per kernel in topo order  -> dataset-level summaries
+          stamp the job block (counts, elapsed)
+          commit() for DataArchivers        -> write the finished documents
 
 Two properties are worth naming because they are easy to lose:
 
@@ -33,6 +35,7 @@ from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from datetime import datetime, timezone
 from typing import Any, Callable, Iterator
 
+from .cache import configure_cache, disk_cache
 from .data import ArtifactUnion
 from .errors import ExecutorError
 from .kernel import MutatingKernel, SourceKernel
@@ -52,6 +55,12 @@ class Executor:
         self.pipeline = pipeline
         self.max_workers = max_workers or min(8, max(1, len(pipeline.nodes)))
         self.artifacts = ArtifactUnion()
+        # A YAML that configures the scratch disk takes effect before any I/O can happen;
+        # one that says nothing leaves whatever this process already has (env, default,
+        # or a cache an embedding program installed on purpose).
+        if pipeline.cache:
+            configure_cache(**pipeline.cache)
+        self.cache = disk_cache()
         #: Optional ``observer(event, **payload)`` — progress telemetry for whoever is
         #: watching (``abasift run --vis``). The executor knows nothing about the watcher,
         #: and an observer that raises can never take the job down: see :meth:`_emit`.
@@ -64,16 +73,17 @@ class Executor:
         started = time.time()
         report = Report(
             {
-                "pipeline": p.name,
                 "pipeline_hash": p.hash(),
                 "job_id": p.job_id,
                 "worker": f"{socket.gethostname()}:{os.getpid()}",
                 "started_at": _utc(started),
-                # One clock read per job, so every dumper in the DAG agrees on the stamp;
-                # recorded here so the tree a default dump went to is reproducible.
+                # One clock read per job, so every writer in the DAG agrees on the stamp;
+                # recorded here so the tree a default run wrote to is reproducible.
                 "started_unix": int(started),
                 "python": platform.python_version(),
-            }
+            },
+            definition=p.to_dict(),  # for the pipeline document the archiver writes
+            yaml_path=p.path,
         )
         kernels = p.instantiate()
         for name, k in kernels.items():
@@ -84,6 +94,7 @@ class Executor:
         order = p.topo_order()
         downstream = [n for n in order if n != p.source]
         inputs = {n.name: tuple(n.inputs) for n in p.nodes}
+        leaves = _leaves(order, inputs)
         self._emit("job_started", job=report.job)
 
         n_batches = 0
@@ -107,11 +118,10 @@ class Executor:
                 )
 
                 batch_art = ArtifactUnion()
-                for a in arts.values():
-                    batch_art = batch_art.union(a)
                 batch_report = Report()
-                for r in reps.values():
-                    batch_report.merge(r)
+                for name in leaves:
+                    batch_art = batch_art.union(arts[name])
+                    batch_report.merge(reps[name])
 
                 self.artifacts = self.artifacts.union(batch_art.without_transients())
                 report.merge(batch_report)
@@ -121,11 +131,11 @@ class Executor:
                 if batch is not None:
                     batch.release()  # tier-2 cache: decoded payloads die with the batch
 
-        # dataset-level reduces, then the dump pass (so dumped reports are complete)
+        # dataset-level reduces, then the commit pass (so what is written is complete)
         view = ReportView(report)
         for name in order:
             k = kernels[name]
-            out = k.finalize(self.artifacts, view)
+            out = k.digest(self.artifacts, view)
             if out is not None:
                 ext, rext = out
                 self.artifacts = self.artifacts.extended(name, ext)
@@ -140,7 +150,7 @@ class Executor:
         for name in order:
             k = kernels[name]
             if isinstance(k, MutatingKernel):
-                m = k.finalize_mutating(self.artifacts, ReportView(report))
+                m = k.commit(self.artifacts, ReportView(report))
                 if m is not None:
                     self.artifacts = self.artifacts.with_mutations(m.replace, m.delete).extended(
                         name, m.ext
@@ -227,6 +237,19 @@ class Executor:
         rep_out.apply(name, rext)
         log.debug("node %r: %.2fs", name, time.time() - t0)
         return art_out, rep_out
+
+
+def _leaves(order: list[str], inputs: dict[str, tuple[str, ...]]) -> list[str]:
+    """The nodes nothing consumes — the only ones a batch merge has to look at.
+
+    Every node's union is its inputs' union plus its own extensions, so a leaf already
+    contains every ancestor's artifacts: folding the middle of the graph back in adds
+    nothing. It is not merely redundant, either. A ``MutatingKernel`` that *replaces* a
+    value leaves its ancestors holding the pre-mutation one, and merging those in means
+    one key arriving with two values — the mutation losing to a stale copy of itself.
+    """
+    consumed = {dep for deps in inputs.values() for dep in deps}
+    return [name for name in order if name not in consumed]
 
 
 def _union_of(unions) -> ArtifactUnion:

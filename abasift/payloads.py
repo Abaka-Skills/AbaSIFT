@@ -36,6 +36,49 @@ class VideoMeta:
 
 
 @dataclass(frozen=True)
+class VideoFrames:
+    """A uniformly subsampled frame stack: ``data`` is ``(N, H, W, 3)`` uint8 RGB.
+
+    ``data`` is normally a *memory map* of a file in the worker disk cache, not a heap
+    array — which is what makes a stack bigger than RAM safe to hold: pages arrive when a
+    kernel touches them and the OS reclaims them under pressure. Slicing or arithmetic on
+    it copies, so a kernel that wants the whole thing resident still pays for it.
+    """
+
+    data: np.ndarray
+    fps: float
+    source: str = ""
+
+    def __post_init__(self):
+        if self.data.ndim != 4 or self.data.shape[3] != 3:
+            raise ValueError(f"data must be (N,H,W,3) rgb, got {self.data.shape}")
+
+    def __len__(self) -> int:
+        return int(self.data.shape[0])
+
+    @property
+    def size(self) -> tuple[int, int]:
+        """``(width, height)`` — the ffmpeg/OpenCV order, not the array's."""
+        return int(self.data.shape[2]), int(self.data.shape[1])
+
+    @property
+    def t(self) -> np.ndarray:
+        """Frame timestamps in seconds from stream start (uniform by construction)."""
+        return np.arange(len(self), dtype=np.float64) / self.fps if self.fps else np.zeros(len(self))
+
+    def to_json(self) -> dict:
+        """Summary only — never the pixels."""
+        width, height = self.size
+        return {
+            "n_frames": len(self),
+            "fps": round(float(self.fps), 4),
+            "width": width,
+            "height": height,
+            "nbytes": int(self.data.nbytes),
+        }
+
+
+@dataclass(frozen=True)
 class ImuTrack:
     """A uniformly sampled inertial track.
 

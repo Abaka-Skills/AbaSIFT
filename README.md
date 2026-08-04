@@ -3,6 +3,8 @@
 Distributed quality-control framework for egocentric vendor datasets on S3. A QC pipeline
 is a DAG of kernels described in one YAML, and one YAML is one job on one machine.
 
+<img width="1280" height="719" alt="3b79410f-d3ce-4344-b8fb-a5075574208e" src="https://github.com/user-attachments/assets/6545e372-efb3-4588-a448-420ac86df01c" />
+
 ## Quick start
 
 ```bash
